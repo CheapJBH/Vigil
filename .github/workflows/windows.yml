@@ -75,10 +75,11 @@ jobs:
       - name: Show staging contents
         run: |
           echo "pwd=$(pwd)"
-          WS=$(cygpath -u "$GITHUB_WORKSPACE")
-          echo "WS=$WS"
-          ls -d "$WS"/build/vigil-*-win* || true
-          find "$WS" -maxdepth 2 -type d -name "vigil-*-win*" || true
+          echo "WS=$(cygpath -u "$GITHUB_WORKSPACE")"
+          echo "HOME=$HOME"
+          ls -la | head -20
+          echo "--- search whole workspace and home ---"
+          find /d /c -maxdepth 7 -type d -name "vigil-*-win*" 2>/dev/null | head -10
 
       - name: Package teacher edition
         run: |
