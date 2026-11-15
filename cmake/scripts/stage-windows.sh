@@ -21,8 +21,16 @@ set -uo pipefail
 : "${DLLDIR_GCC:?}" "${DLL_GCC:?}" "${DLL_DDENGINE:?}" "${QT_PLUGIN_DIR:?}"
 STRIP="${STRIP:-}"
 
-cd "$BUILDDIR"
+# CMake 在 Windows 上给出的是 D:/... 形式，MSYS2 的 bash 不一定认，
+# 统一转成 POSIX 路径后再切换目录。
+if command -v cygpath >/dev/null 2>&1; then
+	BUILDDIR=$(cygpath -u "$BUILDDIR")
+	SRCDIR=$(cygpath -u "$SRCDIR")
+fi
 
+cd "$BUILDDIR" || { echo "FATAL: cannot cd to $BUILDDIR"; exit 1; }
+
+echo "== pwd=$(pwd)"
 echo "== staging into $STAGING"
 
 rm -rf "$STAGING"
