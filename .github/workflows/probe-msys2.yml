@@ -15,16 +15,27 @@ jobs:
       - name: Check toolchain and packages
         shell: msys2 {0}
         run: |
-          set -x
-          echo "--- prefix ---"
-          pacman -Q msys2-runtime 2>/dev/null | head -2
-          ls -d /mingw64
-          which gcc g++ cmake ninja makensis 2>/dev/null
-          gcc --version | head -1
-          echo "--- package search ---"
-          for p in qt6-base qt6-tools qt6-svg qca-qt6 libvncserver openldap cyrus-sasl liblzo2 libjpeg-turbo libpng openssl interception; do
-            echo "== $p"
-            pacman -Ss "mingw-w64-x86_64-$p" 2>/dev/null | head -4
+          echo "--- toolchain ---"
+          for t in gcc g++ cmake ninja makensis pacman; do printf '%s: ' "$t"; command -v "$t" || echo MISSING; done
+          echo "--- search ---"
+          for k in qt6-base qca libvncserver openldap cyrus-sasl lzo libjpeg-turbo libpng openssl gcc cmake ninja nsis; do
+            echo "== $k"
+            pacman -Ss "$k" 2>/dev/null | grep -i "^mingw-w64-x86_64-.*$k" | head -3 || echo "(none)"
           done
-          echo "--- installed qt ---"
-          pacman -Qq 2>/dev/null | grep -i "qt6\|qca" | head -20
+          echo "--- direct install attempt ---"
+          pacman -S --noconfirm --needed --assume-installed base 2>/dev/null || true
+          for p in mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja \
+                   mingw-w64-x86_64-qt6-base mingw-w64-x86_64-qt6-tools mingw-w64-x86_64-qt6-svg \
+                   mingw-w64-x86_64-qca-qt6 mingw-w64-x86_64-libvncserver mingw-w64-x86_64-openldap \
+                   mingw-w64-x86_64-cyrus-sasl mingw-w64-x86_64-lzo2 mingw-w64-x86_64-libjpeg-turbo \
+                   mingw-w64-x86_64-libpng mingw-w64-x86_64-openssl ; do
+            if pacman -S --noconfirm --needed "$p" >/dev/null 2>&1; then
+              echo "OK    $p"
+            else
+              echo "FAIL  $p"
+            fi
+          done
+          echo "--- resulting files ---"
+          ls /mingw64/lib/libqca* 2>/dev/null | head -3 || echo "no qca"
+          ls /mingw64/lib/libvnc* 2>/dev/null | head -3 || echo "no vnc"
+          ls /mingw64/bin/Qt6Core.dll /mingw64/bin/libgcc_s_seh-1.dll /mingw64/bin/libstdc++-6.dll 2>/dev/null || true
