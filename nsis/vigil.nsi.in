@@ -35,6 +35,7 @@ VIAddVersionKey "FileVersion"  "${VERSION}"
 ######################################################################
 
 SetCompressor /SOLID lzma
+Unicode true
 Name "${APP_NAME}"
 Caption "${APP_NAME} ${VERSION}"
 OutFile "${INSTALLER_NAME}"
@@ -243,6 +244,43 @@ File "interception/*"
 SectionEnd
 !endif
 
+# ---------------------------------------------------------------- 课堂口令
+
+!ifdef EDITION_TEACHER
+Section "课堂口令 Classroom code" SEC_CLASSROOM
+${INSTALL_TYPE}
+SetOutPath "$INSTDIR\classroom"
+File "classroom-teacher/VigilTeacherSetup.ps1"
+File "classroom-teacher/VigilPairServer.ps1"
+
+${GetParameters} $R0
+${GetOptions} $R0 "/NoStartMenuFolder" $R1
+${If} ${Errors}
+CreateDirectory "$SMPROGRAMS\Vigil"
+CreateShortCut "$SMPROGRAMS\Vigil\课堂口令.lnk" "$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" \
+	'-NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\classroom\VigilTeacherSetup.ps1"' \
+	"$INSTDIR\vigil-master.exe" 0
+${EndIf}
+SectionEnd
+!endif
+
+!ifdef EDITION_STUDENT
+Section "课堂口令 Classroom code" SEC_CLASSROOM
+${INSTALL_TYPE}
+SetOutPath "$INSTDIR\classroom"
+File "classroom-student/VigilStudentSetup.ps1"
+
+${GetParameters} $R0
+${GetOptions} $R0 "/NoStartMenuFolder" $R1
+${If} ${Errors}
+CreateDirectory "$SMPROGRAMS\Vigil"
+CreateShortCut "$SMPROGRAMS\Vigil\绑定课堂.lnk" "$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" \
+	'-NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\classroom\VigilStudentSetup.ps1"' \
+	"$INSTDIR\vigil-server.exe" 0
+${EndIf}
+SectionEnd
+!endif
+
 Function RunConfigurator
 	Exec '"$INSTDIR\vigil-configurator.exe"'
 FunctionEnd
@@ -326,11 +364,14 @@ RmDir /r "$INSTDIR\styles"
 RmDir /r "$INSTDIR\tls"
 RmDir /r "$INSTDIR\translations"
 RmDir /r "$INSTDIR\interception"
+RmDir /r "$INSTDIR\classroom"
 
 RmDir "$INSTDIR"
 
 Delete "$SMPROGRAMS\Vigil\Vigil Master.lnk"
 Delete "$SMPROGRAMS\Vigil\Vigil Configurator.lnk"
+Delete "$SMPROGRAMS\Vigil\课堂口令.lnk"
+Delete "$SMPROGRAMS\Vigil\绑定课堂.lnk"
 Delete "$SMPROGRAMS\Vigil\Uninstall Vigil.lnk"
 Delete "$SMPROGRAMS\Vigil\Vigil Website.lnk"
 RmDir "$SMPROGRAMS\Vigil"

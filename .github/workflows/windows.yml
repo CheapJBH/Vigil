@@ -1,7 +1,7 @@
 name: "Windows x64 build"
 
 # 只构建 Windows 64 位，输出教师端 / 学生端两个安装包。
-# 使用上游同款 mingw-w64 交叉编译镜像，避免 MSYS2/MSVC 的路径与工具链差异。
+# 容器镜像沿用上游 veyon 的 mingw-w64 交叉编译环境（Arch + /usr/x86_64-w64-mingw32）。
 on:
   push:
     tags:
@@ -15,7 +15,8 @@ jobs:
   windows-x64:
     runs-on: ubuntu-latest
     container:
-      image: veyon/ci-mingw-w64:main
+      image: veyon/ci.windows
+      options: --user root
     defaults:
       run:
         shell: bash
@@ -26,58 +27,53 @@ jobs:
         with:
           submodules: false
 
-      - name: Configure
+      - name: Toolchain sanity check
         run: |
           set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           PREFIX=/usr/x86_64-w64-mingw32
-          mkdir -p build && cd build
-          $PREFIX/bin/qt-cmake .. -G Ninja \
-            -DQT_TRANSLATIONS_DIR=$PREFIX/translations
+          ls -d "$PREFIX" || true
+          "$PREFIX/bin/qt-cmake" --version || true
+          makensis -VERSION || true
+          which ninja cmake || true
+          zcat /etc/*release 2>/dev/null | head -5 || true
 
-      - name: Build binaries + staging dir
+      - name: Configure + build + stage
         run: |
           set -euo pipefail
-          cd build
-          ninja windows-binaries
+          .ci/windows/build.sh x86_64 windows-binaries
 
       - name: Show staging contents
         run: |
           set -euo pipefail
-          cd build
-          ls -d vigil-x86_64-* || true
-          ls -la vigil-x86_64-*/ | head -40 || true
+          ls -d vigil-*-win* || true
+          ls -la vigil-*-win*/ | head -50 || true
 
       - name: Package teacher edition
         run: |
           set -euo pipefail
-          cd build
-          D=$(ls -d vigil-x86_64-* | head -1)
-          cd "$D"
-          makensis -DEDITION_TEACHER vigil.nsi
-          mv *.exe ../../ 2>/dev/null || cp *.exe ../../ || true
+          D=$(ls -d vigil-*-win* | head -1)
+          ( cd "$D" && makensis -DEDITION_TEACHER vigil.nsi )
 
       - name: Package student edition
         run: |
           set -euo pipefail
-          cd build
-          D=$(ls -d vigil-x86_64-* | head -1)
-          cd "$D"
-          makensis -DEDITION_STUDENT vigil.nsi
-          mv *.exe ../../ 2>/dev/null || cp *.exe ../../ || true
+          D=$(ls -d vigil-*-win* | head -1)
+          ( cd "$D" && makensis -DEDITION_STUDENT vigil.nsi )
 
       - name: Collect artifacts
         run: |
           set -euo pipefail
           mkdir -p dist
-          find build -maxdepth 2 -name "vigil-*-setup.exe" -exec cp {} dist/ \; || true
-          ls -la dist/ || true
+          find . -maxdepth 2 -name "vigil-*-setup.exe" -exec cp {} dist/ \;
+          ls -la dist/
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: vigil-windows-x64
           path: dist/*.exe
-          if-no-files-found: warn
+          if-no-files-found: error
 
       - name: Attach to release
         if: startsWith(github.ref, 'refs/tags/')
