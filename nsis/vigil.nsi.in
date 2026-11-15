@@ -186,7 +186,7 @@ SetOutPath "$INSTDIR\plugins"
 File "plugins/*.dll"
 # translations
 SetOutPath "$INSTDIR\translations"
-File "translations/*.qm"
+File /nonfatal "translations/*.qm"
 # QCA plugins
 SetOutPath "$INSTDIR\crypto"
 File "crypto/*.dll"
