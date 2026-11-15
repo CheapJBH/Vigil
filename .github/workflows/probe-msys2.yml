@@ -1,0 +1,30 @@
+name: "probe-msys2"
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: windows-latest
+    steps:
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: false
+          install: ''
+
+      - name: Check toolchain and packages
+        shell: msys2 {0}
+        run: |
+          set -x
+          echo "--- prefix ---"
+          pacman -Q msys2-runtime 2>/dev/null | head -2
+          ls -d /mingw64
+          which gcc g++ cmake ninja makensis 2>/dev/null
+          gcc --version | head -1
+          echo "--- package search ---"
+          for p in qt6-base qt6-tools qt6-svg qca-qt6 libvncserver openldap cyrus-sasl liblzo2 libjpeg-turbo libpng openssl interception; do
+            echo "== $p"
+            pacman -Ss "mingw-w64-x86_64-$p" 2>/dev/null | head -4
+          done
+          echo "--- installed qt ---"
+          pacman -Qq 2>/dev/null | grep -i "qt6\|qca" | head -20
