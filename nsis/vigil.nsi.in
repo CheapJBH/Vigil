@@ -172,35 +172,35 @@ RmDir /r "$INSTDIR\translations"
 SetOverwrite on
 SetOutPath "$INSTDIR"
 # core components
-File "vigil-server.exe"
-File "vigil-service.exe"
-File "vigil-configurator.exe"
-File "vigil-cli.exe"
-File "vigil-wcli.exe"
-File "vigil-worker.exe"
-File "*.dll"
-File "LICENSE.TXT"
-File "README.TXT"
+File "${__FILEDIR__}/vigil-server.exe"
+File "${__FILEDIR__}/vigil-service.exe"
+File "${__FILEDIR__}/vigil-configurator.exe"
+File "${__FILEDIR__}/vigil-cli.exe"
+File "${__FILEDIR__}/vigil-wcli.exe"
+File "${__FILEDIR__}/vigil-worker.exe"
+File "${__FILEDIR__}/*.dll"
+File "${__FILEDIR__}/LICENSE.TXT"
+File "${__FILEDIR__}/README.TXT"
 # plugins
 SetOutPath "$INSTDIR\plugins"
-File "plugins/*.dll"
+File "${__FILEDIR__}/plugins/*.dll"
 # translations
 SetOutPath "$INSTDIR\translations"
-File /nonfatal "translations/*.qm"
+File /nonfatal "${__FILEDIR__}/translations/*.qm"
 # QCA plugins
 SetOutPath "$INSTDIR\crypto"
-File "crypto/*.dll"
+File "${__FILEDIR__}/crypto/*.dll"
 # Qt image format plugin
 SetOutPath "$INSTDIR\imageformats"
-File "imageformats/qjpeg.dll"
+File "${__FILEDIR__}/imageformats/qjpeg.dll"
 # Qt platform plugin
 SetOutPath "$INSTDIR\platforms"
-File "platforms/qwindows.dll"
+File "${__FILEDIR__}/platforms/qwindows.dll"
 SetOutPath "$INSTDIR\styles"
-File "styles/*.dll"
+File "${__FILEDIR__}/styles/*.dll"
 # Qt TLS backend
 SetOutPath "$INSTDIR\tls"
-File "tls/qopensslbackend.dll"
+File "${__FILEDIR__}/tls/qopensslbackend.dll"
 # configuration
 ExecWait '"$INSTDIR\vigil-wcli.exe" service register'
 ExecWait '"$INSTDIR\vigil-wcli.exe" config set Network/FirewallExceptionEnabled 1'
@@ -224,7 +224,7 @@ SectionEnd
 Section "Vigil Master" SEC_MASTER
 ${INSTALL_TYPE}
 SetOutPath "$INSTDIR"
-File "vigil-master.exe"
+File "${__FILEDIR__}/vigil-master.exe"
 
 ${GetParameters} $R0
 ${GetOptions} $R0 "/NoStartMenuFolder" $R1
@@ -240,7 +240,7 @@ SectionEnd
 Section "Interception driver" SEC_INTERCEPTION
 ${INSTALL_TYPE}
 SetOutPath "$INSTDIR\interception"
-File "interception/*"
+File "${__FILEDIR__}/interception/*"
 SectionEnd
 !endif
 
@@ -250,8 +250,8 @@ SectionEnd
 Section "课堂口令 Classroom code" SEC_CLASSROOM
 ${INSTALL_TYPE}
 SetOutPath "$INSTDIR\classroom"
-File "classroom-teacher/VigilTeacherSetup.ps1"
-File "classroom-teacher/VigilPairServer.ps1"
+File "${__FILEDIR__}/classroom-teacher/VigilTeacherSetup.ps1"
+File "${__FILEDIR__}/classroom-teacher/VigilPairServer.ps1"
 
 ${GetParameters} $R0
 ${GetOptions} $R0 "/NoStartMenuFolder" $R1
@@ -268,7 +268,7 @@ SectionEnd
 Section "课堂口令 Classroom code" SEC_CLASSROOM
 ${INSTALL_TYPE}
 SetOutPath "$INSTDIR\classroom"
-File "classroom-student/VigilStudentSetup.ps1"
+File "${__FILEDIR__}/classroom-student/VigilStudentSetup.ps1"
 
 ${GetParameters} $R0
 ${GetOptions} $R0 "/NoStartMenuFolder" $R1
