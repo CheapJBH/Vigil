@@ -13,7 +13,12 @@ macro(set_default_target_properties TARGET_NAME)
 		-DQT_USE_QSTRINGBUILDER
 		-DQT_STRICT_ITERATORS
 	)
-	target_compile_options(${TARGET_NAME} PRIVATE "-Wall;-Werror")
+	# MSYS2 的 GCC 比上游构建环境更新，警告集合差异很大，
+	# 在 Windows 上只保留警告而不当作错误，避免无关警告阻断构建。
+	target_compile_options(${TARGET_NAME} PRIVATE "-Wall")
+	if(NOT WIN32)
+		target_compile_options(${TARGET_NAME} PRIVATE "-Werror")
+	endif()
 	if(WITH_LTO)
 		if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND ${CMAKE_VERSION} VERSION_GREATER_EQUAL "3.13.0")
 			target_compile_options(${TARGET_NAME} PRIVATE ${GCC_LTO_FLAGS})
