@@ -78,8 +78,12 @@ jobs:
           echo "WS=$(cygpath -u "$GITHUB_WORKSPACE")"
           echo "HOME=$HOME"
           ls -la | head -20
-          echo "--- search whole workspace and home ---"
-          find /d /c -maxdepth 7 -type d -name "vigil-*-win*" 2>/dev/null | head -10
+          echo "--- build dir ---"
+          ls -la build | head -25
+          echo "--- home ---"
+          ls -la /home/runneradmin | head -20
+          echo "--- search ---"
+          find /home /d/a /c -maxdepth 5 -type d -name "vigil-*-win*" 2>/dev/null | head -10
 
       - name: Package teacher edition
         run: |
