@@ -74,17 +74,23 @@ jobs:
 
       - name: Show staging contents
         run: |
+          export MSYS2_ARG_CONV_EXCL='*'
+          export MSYS_NO_PATHCONV=1
           STAGING=$(ls -d build/vigil-win* | head -1)
           WSTAGING=$(cygpath -w "$PWD/$STAGING")
           echo "STAGING=$STAGING"
           echo "WSTAGING=$WSTAGING"
           ls "$STAGING" | head -20
           echo "--- windows view ---"
-          cmd //c "dir /b \"$WSTAGING\"" 2>&1 | head -20
+          cmd //c "dir /b \"$WSTAGING\"" 2>&1 | head -30 || true
+          echo "--- single file check ---"
+          cmd //c "if exist \"$WSTAGING\\nsis\\welcome-page.bmp\" (echo BMP_EXISTS) else (echo BMP_MISSING)" || true
 
       - name: Package teacher edition
         run: |
           set -e
+          export MSYS2_ARG_CONV_EXCL='*'
+          export MSYS_NO_PATHCONV=1
           STAGING=$(ls -d build/vigil-win* | head -1)
           WSTAGING=$(cygpath -w "$PWD/$STAGING")
           WSRC=$(cygpath -w "$PWD")
@@ -96,6 +102,8 @@ jobs:
       - name: Package student edition
         run: |
           set -e
+          export MSYS2_ARG_CONV_EXCL='*'
+          export MSYS_NO_PATHCONV=1
           STAGING=$(ls -d build/vigil-win* | head -1)
           WSTAGING=$(cygpath -w "$PWD/$STAGING")
           WSRC=$(cygpath -w "$PWD")
