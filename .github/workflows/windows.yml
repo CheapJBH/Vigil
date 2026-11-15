@@ -82,12 +82,18 @@ jobs:
       - name: Package teacher edition
         run: |
           STAGING=$(ls -d build/vigil-win* | head -1)
+          # 确保 NSIS 的位图/图标资源一定到位（不依赖跨路径 copy）
+          mkdir -p "$STAGING/nsis"
+          cp -a nsis/. "$STAGING/nsis/"
+          ls -la "$STAGING/nsis" | head -10
           ( cd "$STAGING" && makensis -DEDITION_TEACHER vigil.nsi )
           ls -la "$STAGING"/*setup.exe
 
       - name: Package student edition
         run: |
           STAGING=$(ls -d build/vigil-win* | head -1)
+          mkdir -p "$STAGING/nsis"
+          cp -a nsis/. "$STAGING/nsis/"
           ( cd "$STAGING" && makensis -DEDITION_STUDENT vigil.nsi )
           ls -la "$STAGING"/*setup.exe
 
