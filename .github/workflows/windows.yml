@@ -59,8 +59,10 @@ jobs:
       - name: Configure
         run: |
           mkdir -p build && cd build
-          qt-cmake .. -G Ninja \
+          cmake .. -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH=/mingw64 \
+            -DCMAKE_INSTALL_PREFIX=/mingw64 \
             -DQT_TRANSLATIONS_DIR=/mingw64/share/qt6/translations
 
       - name: Build binaries and stage
