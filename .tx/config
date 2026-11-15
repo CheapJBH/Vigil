@@ -1,0 +1,9 @@
+[main]
+host = https://www.transifex.com
+
+[o:vigil-solutions:p:vigil:r:vigil_4_11]
+file_filter = translations/vigil_<lang>.ts
+source_file = translations/vigil.ts
+source_lang = en
+minimum_perc = 5
+type = QT

@@ -1,0 +1,19 @@
+project:
+  name: Vigil
+  version: 4.11.4
+  copyright: 2004-2026
+  author: Tobias Junghans
+  contact: Tobias Junghans <tobydox@vigil.io>
+  contributors:
+    - Tobias Junghans <tobydox@vigil.io>
+  description: Virtual Eye On Networks - OpenSource classroom management
+  license: GPL-2.0
+  category: Education
+  homepage: https://vigil.io
+  repository:
+    type: git
+    url: https://github.com/vigil/vigil.git
+  bugs:
+    url: https://github.com/vigil/vigil/issues
+  documentation:
+    url: https://docs.vigil.io

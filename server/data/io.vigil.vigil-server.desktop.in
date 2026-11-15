@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.5
+Type=Application
+NoDisplay=true
+Exec=@CMAKE_INSTALL_PREFIX@/bin/vigil-server
+Name=Vigil Server
+Comment=Vigil remote desktop server
+Icon=vigil
+Categories=Qt;Education;Network;RemoteAccess;
