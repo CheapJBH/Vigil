@@ -5,8 +5,18 @@
 !define COPYRIGHT "2004-2026 Vigil Solutions / Tobias Junghans"
 !define DESCRIPTION "Vigil Installer"
 !define LICENSE_TXT "COPYING"
+!ifdef EDITION_TEACHER
+!define INSTALLER_NAME "vigil-teacher-${VERSION}-@VIGIL_WINDOWS_ARCH@-setup.exe"
+!else ifdef EDITION_STUDENT
+!define INSTALLER_NAME "vigil-student-${VERSION}-@VIGIL_WINDOWS_ARCH@-setup.exe"
+!else
 !define INSTALLER_NAME "vigil-${VERSION}-@VIGIL_WINDOWS_ARCH@-setup.exe"
+!endif
+!ifdef EDITION_STUDENT
+!define MAIN_APP_EXE "vigil-server.exe"
+!else
 !define MAIN_APP_EXE "vigil-master.exe"
+!endif
 !define INSTALL_TYPE "SetShellVarContext all"
 !define REG_ROOT "HKLM"
 !define REG_APP_PATH "Software\Microsoft\Windows\CurrentVersion\App Paths\${MAIN_APP_EXE}"
@@ -144,6 +154,7 @@ RequestExecutionLevel admin
 
 ######################################################################
 
+!ifndef EDITION_TEACHER
 Section "Vigil Service" SEC_SERVICE
 SectionIn RO
 ${INSTALL_TYPE}
@@ -206,7 +217,9 @@ ${If} $R1 != ""
 ${EndIf}
 ExecWait '"$INSTDIR\vigil-wcli.exe" service start'
 SectionEnd
+!endif
 
+!ifndef EDITION_STUDENT
 Section "Vigil Master" SEC_MASTER
 ${INSTALL_TYPE}
 SetOutPath "$INSTDIR"
@@ -220,12 +233,15 @@ CreateShortCut "$SMPROGRAMS\Vigil\Vigil Master.lnk" "$INSTDIR\${MAIN_APP_EXE}"
 ${EndIf}
 CreateShortCut "$DESKTOP\Vigil Master.lnk" "$INSTDIR\${MAIN_APP_EXE}"
 SectionEnd
+!endif
 
+!ifndef EDITION_TEACHER
 Section "Interception driver" SEC_INTERCEPTION
 ${INSTALL_TYPE}
 SetOutPath "$INSTDIR\interception"
 File "interception/*"
 SectionEnd
+!endif
 
 Function RunConfigurator
 	Exec '"$INSTDIR\vigil-configurator.exe"'
@@ -283,10 +299,12 @@ SectionEnd
 Section Uninstall
 ${INSTALL_TYPE}
 
+!ifndef EDITION_TEACHER
 ExecWait '"$INSTDIR\vigil-wcli.exe" config set Service/SoftwareSASEnabled 0'
 ExecWait '"$INSTDIR\vigil-wcli.exe" config set Network/FirewallExceptionEnabled 0'
 ExecWait '"$INSTDIR\vigil-wcli.exe" service unregister'
 ExecWait '"$INSTDIR\interception\install-interception.exe" /uninstall'
+!endif
 # make sure the service is stopped and all file handles are released
 Sleep 2000
 
