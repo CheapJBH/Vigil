@@ -1,7 +1,8 @@
 name: "Windows x64 build"
 
 # 只构建 Windows 64 位，输出教师端 / 学生端两个安装包。
-# 容器镜像沿用上游 veyon 的 mingw-w64 交叉编译环境（Arch + /usr/x86_64-w64-mingw32）。
+# 路线：GitHub Actions 的 windows-latest + MSYS2（MinGW-w64 原生编译），
+# 不依赖上游 veyon 的 Linux 交叉编译镜像（该镜像并不存在）。
 on:
   push:
     tags:
@@ -13,13 +14,10 @@ permissions:
 
 jobs:
   windows-x64:
-    runs-on: ubuntu-latest
-    container:
-      image: veyon/ci.windows
-      options: --user root
+    runs-on: windows-latest
     defaults:
       run:
-        shell: bash
+        shell: msys2 {0}
 
     steps:
       - name: Checkout
@@ -27,43 +25,66 @@ jobs:
         with:
           submodules: false
 
-      - name: Toolchain sanity check
-        run: |
-          set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          PREFIX=/usr/x86_64-w64-mingw32
-          ls -d "$PREFIX" || true
-          "$PREFIX/bin/qt-cmake" --version || true
-          makensis -VERSION || true
-          which ninja cmake || true
-          zcat /etc/*release 2>/dev/null | head -5 || true
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: false
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-ninja
+            mingw-w64-x86_64-qt6-base
+            mingw-w64-x86_64-qt6-tools
+            mingw-w64-x86_64-qt6-svg
+            mingw-w64-x86_64-qt6-httpserver
+            mingw-w64-x86_64-qt6-websockets
+            mingw-w64-x86_64-qt6-5compat
+            mingw-w64-x86_64-qca-qt6
+            mingw-w64-x86_64-libvncserver
+            mingw-w64-x86_64-openldap
+            mingw-w64-x86_64-cyrus-sasl
+            mingw-w64-x86_64-lzo2
+            mingw-w64-x86_64-libjpeg-turbo
+            mingw-w64-x86_64-libpng
+            mingw-w64-x86_64-openssl
+            mingw-w64-x86_64-nsis
 
-      - name: Configure + build + stage
+      - name: Sanity check toolchain
         run: |
-          set -euo pipefail
-          .ci/windows/build.sh x86_64 windows-binaries
+          command -v gcc g++ cmake ninja makensis
+          gcc --version | head -1
+          ls /mingw64/share/qt6/plugins | head
+
+      - name: Configure
+        run: |
+          mkdir -p build && cd build
+          qt-cmake .. -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DQT_TRANSLATIONS_DIR=/mingw64/share/qt6/translations
+
+      - name: Build binaries and stage
+        run: |
+          cd build
+          ninja windows-binaries
 
       - name: Show staging contents
         run: |
-          set -euo pipefail
           ls -d vigil-*-win* || true
-          ls -la vigil-*-win*/ | head -50 || true
+          ls vigil-*-win*/ | head -60 || true
 
       - name: Package teacher edition
         run: |
-          set -euo pipefail
           D=$(ls -d vigil-*-win* | head -1)
           ( cd "$D" && makensis -DEDITION_TEACHER vigil.nsi )
 
       - name: Package student edition
         run: |
-          set -euo pipefail
           D=$(ls -d vigil-*-win* | head -1)
           ( cd "$D" && makensis -DEDITION_STUDENT vigil.nsi )
 
       - name: Collect artifacts
         run: |
-          set -euo pipefail
           mkdir -p dist
           find . -maxdepth 2 -name "vigil-*-setup.exe" -exec cp {} dist/ \;
           ls -la dist/
