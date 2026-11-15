@@ -75,34 +75,27 @@ jobs:
       - name: Show staging contents
         run: |
           echo "pwd=$(pwd)"
-          echo "WS=$(cygpath -u "$GITHUB_WORKSPACE")"
-          echo "HOME=$HOME"
-          ls -la | head -20
-          echo "--- build dir ---"
-          ls -la build | head -25
-          echo "--- home ---"
-          ls -la /home/runneradmin | head -20
-          echo "--- search ---"
-          find /home /d/a /c -maxdepth 5 -type d -name "vigil-*-win*" 2>/dev/null | head -10
+          STAGING=$(ls -d build/vigil-win* | head -1)
+          echo "STAGING=$STAGING"
+          ls "$STAGING" | head -40
 
       - name: Package teacher edition
         run: |
-          WS=$(cygpath -u "$GITHUB_WORKSPACE")
-          D=$(find "$WS" -maxdepth 2 -type d -name "vigil-*-win*" | head -1)
-          echo "staging=$D"
-          ( cd "$D" && makensis -DEDITION_TEACHER vigil.nsi )
+          STAGING=$(ls -d build/vigil-win* | head -1)
+          ( cd "$STAGING" && makensis -DEDITION_TEACHER vigil.nsi )
+          ls -la "$STAGING"/*setup.exe
 
       - name: Package student edition
         run: |
-          WS=$(cygpath -u "$GITHUB_WORKSPACE")
-          D=$(find "$WS" -maxdepth 2 -type d -name "vigil-*-win*" | head -1)
-          echo "staging=$D"
-          ( cd "$D" && makensis -DEDITION_STUDENT vigil.nsi )
+          STAGING=$(ls -d build/vigil-win* | head -1)
+          ( cd "$STAGING" && makensis -DEDITION_STUDENT vigil.nsi )
+          ls -la "$STAGING"/*setup.exe
 
       - name: Collect artifacts
         run: |
           mkdir -p dist
           find . -maxdepth 4 -name "vigil-*-setup.exe" -exec cp {} dist/ \;
+          find . -maxdepth 4 -name "vigil-*setup.exe" -exec cp {} dist/ \;
           ls -la dist/
 
       - name: Upload artifacts
