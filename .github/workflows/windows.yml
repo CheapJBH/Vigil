@@ -1,8 +1,11 @@
 name: "Windows x64 build"
 
 # 只构建 Windows 64 位，输出教师端 / 学生端两个安装包。
-# 路线：GitHub Actions 的 windows-latest + MSYS2（MinGW-w64 原生编译），
-# 不依赖上游 veyon 的 Linux 交叉编译镜像（该镜像并不存在）。
+#
+# 分两个 job：
+#   1. build   —— MSYS2（MinGW-w64）原生编译，产出 staging 目录
+#   2. package —— 纯 Windows runner 上用原生 NSIS 打包
+# MSYS2 与 Windows 的路径视图混用会导致 makensis 找不到资源，因此把打包彻底隔离。
 on:
   push:
     tags:
@@ -13,12 +16,11 @@ permissions:
   contents: write
 
 jobs:
-  windows-x64:
+  build:
     runs-on: windows-latest
     defaults:
       run:
         shell: msys2 {0}
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -49,13 +51,11 @@ jobs:
             mingw-w64-x86_64-libjpeg-turbo
             mingw-w64-x86_64-libpng
             mingw-w64-x86_64-openssl
-            mingw-w64-x86_64-nsis
 
       - name: Sanity check toolchain
         run: |
-          command -v gcc g++ cmake ninja makensis
+          command -v gcc g++ cmake ninja
           gcc --version | head -1
-          ls /mingw64/share/qt6/plugins | head
 
       - name: Configure
         run: |
@@ -72,52 +72,72 @@ jobs:
           cd build
           ninja windows-binaries
 
-      - name: Show staging contents
-        run: |
-          export MSYS2_ARG_CONV_EXCL='*'
-          export MSYS_NO_PATHCONV=1
-          STAGING=$(ls -d build/vigil-win* | head -1)
-          WSTAGING=$(cygpath -w "$PWD/$STAGING")
-          echo "STAGING=$STAGING"
-          echo "WSTAGING=$WSTAGING"
-          ls "$STAGING" | head -20
-          echo "--- windows view ---"
-          cmd /c "dir /b \"$WSTAGING\"" 2>&1 | head -30 || true
-          echo "--- single file check ---"
-          cmd /c "if exist \"$WSTAGING\\nsis\\welcome-page.bmp\" (echo BMP_EXISTS) else (echo BMP_MISSING)" || true
-
-      - name: Package teacher edition
+      - name: Ensure NSIS assets and classroom tools are staged
         run: |
           set -e
-          export MSYS2_ARG_CONV_EXCL='*'
-          export MSYS_NO_PATHCONV=1
           STAGING=$(ls -d build/vigil-win* | head -1)
-          WSTAGING=$(cygpath -w "$PWD/$STAGING")
-          WSRC=$(cygpath -w "$PWD")
-          # 用 cmd 复制资源并打包，完全绕开 MSYS 与 Windows 的路径视图差异
-          cmd /c "xcopy /E /I /Y \"$WSRC\\nsis\" \"$WSTAGING\\nsis\" >nul" || true
-          cmd /c "cd /D \"$WSTAGING\" && makensis -DEDITION_TEACHER vigil.nsi"
-          ls -la "$STAGING"/*setup.exe
+          mkdir -p "$STAGING/nsis"
+          cp -a nsis/. "$STAGING/nsis/"
+          mkdir -p "$STAGING/classroom-teacher" "$STAGING/classroom-student"
+          cp -a tools/classroom-setup/teacher/. "$STAGING/classroom-teacher/" 2>/dev/null || true
+          cp -a tools/classroom-setup/student/. "$STAGING/classroom-student/" 2>/dev/null || true
+          ls "$STAGING" | head -40
+          ls "$STAGING/nsis"
 
-      - name: Package student edition
+      - name: Upload staging
+        uses: actions/upload-artifact@v4
+        with:
+          name: vigil-staging
+          path: build/vigil-win*
+          if-no-files-found: error
+
+  package:
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - name: Download staging
+        uses: actions/download-artifact@v4
+        with:
+          name: vigil-staging
+          path: staging
+
+      - name: Install NSIS
+        run: choco install nsis --no-progress -y
+        shell: cmd
+
+      - name: List staging
+        shell: pwsh
         run: |
-          set -e
-          export MSYS2_ARG_CONV_EXCL='*'
-          export MSYS_NO_PATHCONV=1
-          STAGING=$(ls -d build/vigil-win* | head -1)
-          WSTAGING=$(cygpath -w "$PWD/$STAGING")
-          WSRC=$(cygpath -w "$PWD")
-          cmd /c "xcopy /E /I /Y \"$WSRC\\nsis\" \"$WSTAGING\\nsis\" >nul" || true
-          cmd /c "cd /D \"$WSTAGING\" && makensis -DEDITION_STUDENT vigil.nsi"
-          ls -la "$STAGING"/*setup.exe
+          Get-ChildItem -Recurse staging -Depth 1 | Select-Object -First 40 | Format-Table Name, Length
 
-      - name: Collect artifacts
+      - name: Package both editions
+        shell: pwsh
         run: |
-          mkdir -p dist
-          find build -maxdepth 3 -name "vigil-*setup.exe" -exec cp {} dist/ \;
-          ls -la dist/
+          $ErrorActionPreference = 'Stop'
+          $makensis = 'C:\Program Files (x86)\NSIS\makensis.exe'
+          if (-not (Test-Path $makensis)) { throw "makensis not found at $makensis" }
 
-      - name: Upload artifacts
+          $dir = Get-ChildItem staging -Directory | Select-Object -First 1
+          if (-not $dir) { throw "staging directory missing" }
+          Push-Location $dir.FullName
+          try {
+            Write-Host "packaging in $(Get-Location)"
+            & $makensis -DEDITION_TEACHER vigil.nsi
+            if ($LASTEXITCODE -ne 0) { throw "teacher packaging failed ($LASTEXITCODE)" }
+            & $makensis -DEDITION_STUDENT vigil.nsi
+            if ($LASTEXITCODE -ne 0) { throw "student packaging failed ($LASTEXITCODE)" }
+          } finally {
+            Pop-Location
+          }
+
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Get-ChildItem staging -Recurse -Filter "*setup.exe" | ForEach-Object {
+            Copy-Item $_.FullName dist\
+            Write-Host "collected $($_.Name) ($($_.Length) bytes)"
+          }
+          Get-ChildItem dist
+
+      - name: Upload installers
         uses: actions/upload-artifact@v4
         with:
           name: vigil-windows-x64
