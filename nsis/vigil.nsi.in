@@ -4,7 +4,7 @@
 !define VERSION "@VERSION_MAJOR@.@VERSION_MINOR@.@VERSION_PATCH@.@VERSION_BUILD@"
 !define COPYRIGHT "2004-2026 Vigil Solutions / Tobias Junghans"
 !define DESCRIPTION "Vigil Installer"
-!define LICENSE_TXT "${__FILEDIR__}/COPYING"
+!define LICENSE_TXT "COPYING"
 !ifdef EDITION_TEACHER
 !define INSTALLER_NAME "vigil-teacher-${VERSION}-@VIGIL_WINDOWS_ARCH@-setup.exe"
 !else ifdef EDITION_STUDENT
@@ -55,13 +55,13 @@ RequestExecutionLevel admin
 !define MUI_ABORTWARNING
 !define MUI_UNABORTWARNING
 
-!define MUI_WELCOMEFINISHPAGE_BITMAP "${__FILEDIR__}/nsis/welcome-page.bmp"
-!define MUI_UNWELCOMEFINISHPAGE_BITMAP "${__FILEDIR__}/nsis/welcome-page.bmp"
+!define MUI_WELCOMEFINISHPAGE_BITMAP "nsis/welcome-page.bmp"
+!define MUI_UNWELCOMEFINISHPAGE_BITMAP "nsis/welcome-page.bmp"
 
-!define MUI_ICON "${__FILEDIR__}/nsis/installer.ico"
-!define MUI_UNICON "${__FILEDIR__}/nsis/uninstaller.ico"
+!define MUI_ICON "nsis/installer.ico"
+!define MUI_UNICON "nsis/uninstaller.ico"
 !define MUI_HEADERIMAGE
-!define MUI_HEADERIMAGE_BITMAP "${__FILEDIR__}/nsis/header.bmp"
+!define MUI_HEADERIMAGE_BITMAP "nsis/header.bmp"
 !define MUI_HEADERIMAGE_RIGHT
 
 !define MUI_LANGDLL_REGISTRY_ROOT "${REG_ROOT}"
@@ -172,35 +172,35 @@ RmDir /r "$INSTDIR\translations"
 SetOverwrite on
 SetOutPath "$INSTDIR"
 # core components
-File "${__FILEDIR__}/vigil-server.exe"
-File "${__FILEDIR__}/vigil-service.exe"
-File "${__FILEDIR__}/vigil-configurator.exe"
-File "${__FILEDIR__}/vigil-cli.exe"
-File "${__FILEDIR__}/vigil-wcli.exe"
-File "${__FILEDIR__}/vigil-worker.exe"
-File "${__FILEDIR__}/*.dll"
-File "${__FILEDIR__}/LICENSE.TXT"
-File "${__FILEDIR__}/README.TXT"
+File "vigil-server.exe"
+File "vigil-service.exe"
+File "vigil-configurator.exe"
+File "vigil-cli.exe"
+File "vigil-wcli.exe"
+File "vigil-worker.exe"
+File "*.dll"
+File "LICENSE.TXT"
+File "README.TXT"
 # plugins
 SetOutPath "$INSTDIR\plugins"
-File "${__FILEDIR__}/plugins/*.dll"
+File "plugins/*.dll"
 # translations
 SetOutPath "$INSTDIR\translations"
-File /nonfatal "${__FILEDIR__}/translations/*.qm"
+File /nonfatal "translations/*.qm"
 # QCA plugins
 SetOutPath "$INSTDIR\crypto"
-File "${__FILEDIR__}/crypto/*.dll"
+File "crypto/*.dll"
 # Qt image format plugin
 SetOutPath "$INSTDIR\imageformats"
-File "${__FILEDIR__}/imageformats/qjpeg.dll"
+File "imageformats/qjpeg.dll"
 # Qt platform plugin
 SetOutPath "$INSTDIR\platforms"
-File "${__FILEDIR__}/platforms/qwindows.dll"
+File "platforms/qwindows.dll"
 SetOutPath "$INSTDIR\styles"
-File "${__FILEDIR__}/styles/*.dll"
+File "styles/*.dll"
 # Qt TLS backend
 SetOutPath "$INSTDIR\tls"
-File "${__FILEDIR__}/tls/qopensslbackend.dll"
+File "tls/qopensslbackend.dll"
 # configuration
 ExecWait '"$INSTDIR\vigil-wcli.exe" service register'
 ExecWait '"$INSTDIR\vigil-wcli.exe" config set Network/FirewallExceptionEnabled 1'
@@ -224,7 +224,7 @@ SectionEnd
 Section "Vigil Master" SEC_MASTER
 ${INSTALL_TYPE}
 SetOutPath "$INSTDIR"
-File "${__FILEDIR__}/vigil-master.exe"
+File "vigil-master.exe"
 
 ${GetParameters} $R0
 ${GetOptions} $R0 "/NoStartMenuFolder" $R1
@@ -240,7 +240,7 @@ SectionEnd
 Section "Interception driver" SEC_INTERCEPTION
 ${INSTALL_TYPE}
 SetOutPath "$INSTDIR\interception"
-File "${__FILEDIR__}/interception/*"
+File "interception/*"
 SectionEnd
 !endif
 
@@ -250,8 +250,8 @@ SectionEnd
 Section "课堂口令 Classroom code" SEC_CLASSROOM
 ${INSTALL_TYPE}
 SetOutPath "$INSTDIR\classroom"
-File "${__FILEDIR__}/classroom-teacher/VigilTeacherSetup.ps1"
-File "${__FILEDIR__}/classroom-teacher/VigilPairServer.ps1"
+File "classroom-teacher/VigilTeacherSetup.ps1"
+File "classroom-teacher/VigilPairServer.ps1"
 
 ${GetParameters} $R0
 ${GetOptions} $R0 "/NoStartMenuFolder" $R1
@@ -268,7 +268,7 @@ SectionEnd
 Section "课堂口令 Classroom code" SEC_CLASSROOM
 ${INSTALL_TYPE}
 SetOutPath "$INSTDIR\classroom"
-File "${__FILEDIR__}/classroom-student/VigilStudentSetup.ps1"
+File "classroom-student/VigilStudentSetup.ps1"
 
 ${GetParameters} $R0
 ${GetOptions} $R0 "/NoStartMenuFolder" $R1
