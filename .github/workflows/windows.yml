@@ -43,7 +43,6 @@ jobs:
             mingw-w64-x86_64-qt6-translations
             mingw-w64-x86_64-qca-qt6
             mingw-w64-x86_64-libvncserver
-            mingw-w64-x86_64-interception
             mingw-w64-x86_64-openldap
             mingw-w64-x86_64-cyrus-sasl
             mingw-w64-x86_64-lzo2
