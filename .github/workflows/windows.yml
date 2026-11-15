@@ -74,17 +74,24 @@ jobs:
 
       - name: Show staging contents
         run: |
-          ls -d build/vigil-*-win* || true
-          ls build/vigil-*-win*/ | head -60 || true
+          echo "pwd=$(pwd)"
+          WS=$(cygpath -u "$GITHUB_WORKSPACE")
+          echo "WS=$WS"
+          ls -d "$WS"/build/vigil-*-win* || true
+          find "$WS" -maxdepth 2 -type d -name "vigil-*-win*" || true
 
       - name: Package teacher edition
         run: |
-          D=$(ls -d build/vigil-*-win* | head -1)
+          WS=$(cygpath -u "$GITHUB_WORKSPACE")
+          D=$(find "$WS" -maxdepth 2 -type d -name "vigil-*-win*" | head -1)
+          echo "staging=$D"
           ( cd "$D" && makensis -DEDITION_TEACHER vigil.nsi )
 
       - name: Package student edition
         run: |
-          D=$(ls -d build/vigil-*-win* | head -1)
+          WS=$(cygpath -u "$GITHUB_WORKSPACE")
+          D=$(find "$WS" -maxdepth 2 -type d -name "vigil-*-win*" | head -1)
+          echo "staging=$D"
           ( cd "$D" && makensis -DEDITION_STUDENT vigil.nsi )
 
       - name: Collect artifacts
