@@ -74,34 +74,39 @@ jobs:
 
       - name: Show staging contents
         run: |
-          echo "pwd=$(pwd)"
           STAGING=$(ls -d build/vigil-win* | head -1)
+          WSTAGING=$(cygpath -w "$PWD/$STAGING")
           echo "STAGING=$STAGING"
-          ls "$STAGING" | head -40
+          echo "WSTAGING=$WSTAGING"
+          ls "$STAGING" | head -20
+          echo "--- windows view ---"
+          cmd //c "dir /b \"$WSTAGING\"" 2>&1 | head -20
 
       - name: Package teacher edition
         run: |
+          set -e
           STAGING=$(ls -d build/vigil-win* | head -1)
-          # 确保 NSIS 的位图/图标资源一定到位（不依赖跨路径 copy）
-          mkdir -p "$STAGING/nsis"
-          cp -a nsis/. "$STAGING/nsis/"
-          ls -la "$STAGING/nsis" | head -10
-          ( cd "$STAGING" && makensis -DEDITION_TEACHER vigil.nsi )
+          WSTAGING=$(cygpath -w "$PWD/$STAGING")
+          WSRC=$(cygpath -w "$PWD")
+          # 用 cmd 复制资源并打包，完全绕开 MSYS 与 Windows 的路径视图差异
+          cmd //c "xcopy /E /I /Y \"$WSRC\\nsis\" \"$WSTAGING\\nsis\" >nul" || true
+          cmd //c "cd /D \"$WSTAGING\" && makensis -DEDITION_TEACHER vigil.nsi"
           ls -la "$STAGING"/*setup.exe
 
       - name: Package student edition
         run: |
+          set -e
           STAGING=$(ls -d build/vigil-win* | head -1)
-          mkdir -p "$STAGING/nsis"
-          cp -a nsis/. "$STAGING/nsis/"
-          ( cd "$STAGING" && makensis -DEDITION_STUDENT vigil.nsi )
+          WSTAGING=$(cygpath -w "$PWD/$STAGING")
+          WSRC=$(cygpath -w "$PWD")
+          cmd //c "xcopy /E /I /Y \"$WSRC\\nsis\" \"$WSTAGING\\nsis\" >nul" || true
+          cmd //c "cd /D \"$WSTAGING\" && makensis -DEDITION_STUDENT vigil.nsi"
           ls -la "$STAGING"/*setup.exe
 
       - name: Collect artifacts
         run: |
           mkdir -p dist
-          find . -maxdepth 4 -name "vigil-*-setup.exe" -exec cp {} dist/ \;
-          find . -maxdepth 4 -name "vigil-*setup.exe" -exec cp {} dist/ \;
+          find build -maxdepth 3 -name "vigil-*setup.exe" -exec cp {} dist/ \;
           ls -la dist/
 
       - name: Upload artifacts
