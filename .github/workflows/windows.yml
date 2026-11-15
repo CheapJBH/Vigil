@@ -82,9 +82,9 @@ jobs:
           echo "WSTAGING=$WSTAGING"
           ls "$STAGING" | head -20
           echo "--- windows view ---"
-          cmd //c "dir /b \"$WSTAGING\"" 2>&1 | head -30 || true
+          cmd /c "dir /b \"$WSTAGING\"" 2>&1 | head -30 || true
           echo "--- single file check ---"
-          cmd //c "if exist \"$WSTAGING\\nsis\\welcome-page.bmp\" (echo BMP_EXISTS) else (echo BMP_MISSING)" || true
+          cmd /c "if exist \"$WSTAGING\\nsis\\welcome-page.bmp\" (echo BMP_EXISTS) else (echo BMP_MISSING)" || true
 
       - name: Package teacher edition
         run: |
@@ -95,8 +95,8 @@ jobs:
           WSTAGING=$(cygpath -w "$PWD/$STAGING")
           WSRC=$(cygpath -w "$PWD")
           # 用 cmd 复制资源并打包，完全绕开 MSYS 与 Windows 的路径视图差异
-          cmd //c "xcopy /E /I /Y \"$WSRC\\nsis\" \"$WSTAGING\\nsis\" >nul" || true
-          cmd //c "cd /D \"$WSTAGING\" && makensis -DEDITION_TEACHER vigil.nsi"
+          cmd /c "xcopy /E /I /Y \"$WSRC\\nsis\" \"$WSTAGING\\nsis\" >nul" || true
+          cmd /c "cd /D \"$WSTAGING\" && makensis -DEDITION_TEACHER vigil.nsi"
           ls -la "$STAGING"/*setup.exe
 
       - name: Package student edition
@@ -107,8 +107,8 @@ jobs:
           STAGING=$(ls -d build/vigil-win* | head -1)
           WSTAGING=$(cygpath -w "$PWD/$STAGING")
           WSRC=$(cygpath -w "$PWD")
-          cmd //c "xcopy /E /I /Y \"$WSRC\\nsis\" \"$WSTAGING\\nsis\" >nul" || true
-          cmd //c "cd /D \"$WSTAGING\" && makensis -DEDITION_STUDENT vigil.nsi"
+          cmd /c "xcopy /E /I /Y \"$WSRC\\nsis\" \"$WSTAGING\\nsis\" >nul" || true
+          cmd /c "cd /D \"$WSTAGING\" && makensis -DEDITION_STUDENT vigil.nsi"
           ls -la "$STAGING"/*setup.exe
 
       - name: Collect artifacts
