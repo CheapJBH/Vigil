@@ -74,23 +74,23 @@ jobs:
 
       - name: Show staging contents
         run: |
-          ls -d vigil-*-win* || true
-          ls vigil-*-win*/ | head -60 || true
+          ls -d build/vigil-*-win* || true
+          ls build/vigil-*-win*/ | head -60 || true
 
       - name: Package teacher edition
         run: |
-          D=$(ls -d vigil-*-win* | head -1)
+          D=$(ls -d build/vigil-*-win* | head -1)
           ( cd "$D" && makensis -DEDITION_TEACHER vigil.nsi )
 
       - name: Package student edition
         run: |
-          D=$(ls -d vigil-*-win* | head -1)
+          D=$(ls -d build/vigil-*-win* | head -1)
           ( cd "$D" && makensis -DEDITION_STUDENT vigil.nsi )
 
       - name: Collect artifacts
         run: |
           mkdir -p dist
-          find . -maxdepth 2 -name "vigil-*-setup.exe" -exec cp {} dist/ \;
+          find . -maxdepth 4 -name "vigil-*-setup.exe" -exec cp {} dist/ \;
           ls -la dist/
 
       - name: Upload artifacts
