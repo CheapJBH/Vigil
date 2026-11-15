@@ -1,0 +1,29 @@
+name: "probe"
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: List veyon docker hub repos
+        run: |
+          set -x
+          curl -s "https://hub.docker.com/v2/repositories/veyon/?page_size=100" -o repos.json || true
+          python3 - <<'PY'
+          import json
+          try:
+              d = json.load(open("repos.json"))
+              for r in d.get("results", []):
+                  print("REPO:", r.get("name"))
+          except Exception as e:
+              print("ERR", e)
+              print(open("repos.json").read()[:2000])
+          PY
+
+      - name: Check candidate images
+        run: |
+          for n in ci.windows ci.mingw-w64 mingw-w64 ci.mingw windows ci.windows64 ; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "https://hub.docker.com/v2/repositories/veyon/$n/")
+            echo "candidate veyon/$n -> $code"
+          done
