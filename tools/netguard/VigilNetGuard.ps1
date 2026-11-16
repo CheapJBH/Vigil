@@ -140,11 +140,11 @@ function Remove-NetGuardRules {
 function New-NetGuardRule {
     param(
         [string]$Name,
-        [hashtable]$Args,
+        [hashtable]$RuleArgs,
         [switch]$DryRun
     )
     if ($DryRun) {
-        $desc = ($Args.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join ' '
+        $desc = ($RuleArgs.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join ' '
         Write-Host "[dry-run] $Name :: $desc" -ForegroundColor DarkGray
         return
     }
@@ -156,8 +156,8 @@ function New-NetGuardRule {
         Profile     = 'Any'
         Enabled     = 'True'
     }
-    foreach ($k in $Args.Keys) {
-        if ($null -ne $Args[$k] -and "$($Args[$k])" -ne '') { $base[$k] = $Args[$k] }
+    foreach ($k in $RuleArgs.Keys) {
+        if ($null -ne $RuleArgs[$k] -and "$($RuleArgs[$k])" -ne '') { $base[$k] = $RuleArgs[$k] }
     }
     New-NetFirewallRule @base | Out-Null
 }
