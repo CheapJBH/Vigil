@@ -1,0 +1,22 @@
+{
+  "enabled": true,
+  "defaultOutboundAction": "Block",
+  "allowLoopback": true,
+  "allowLocalSubnet": true,
+  "lanCidrs": ["172.17.202.0/24"],
+  "domains": [
+    "www.example.edu.cn"
+  ],
+  "ips": [
+    "203.0.113.10"
+  ],
+  "ports": [
+    { "ip": "mc.example.com", "port": 25565, "protocol": "tcp" }
+  ],
+  "programs": [
+    "C:\\Program Files\\Minecraft\\runtime\\javaw.exe"
+  ],
+  "allowDnsServers": true,
+  "refreshSeconds": 60,
+  "blockedMessage": "该网络访问未在课堂白名单中，请联系老师。"
+}
