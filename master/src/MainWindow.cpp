@@ -54,6 +54,8 @@
 
 #include "ui_MainWindow.h"
 
+#include <QScreen>
+
 
 MainWindow::MainWindow( VigilMaster &masterCore, QWidget* parent ) :
 	QMainWindow( parent ),
@@ -64,7 +66,19 @@ MainWindow::MainWindow( VigilMaster &masterCore, QWidget* parent ) :
 	ui->setupUi( this );
 
 	restoreState( QByteArray::fromBase64( m_master.userConfig().windowState().toUtf8() ) );
-	restoreGeometry( QByteArray::fromBase64( m_master.userConfig().windowGeometry().toUtf8() ) );
+	const auto geometryRestored =
+		restoreGeometry( QByteArray::fromBase64( m_master.userConfig().windowGeometry().toUtf8() ) );
+
+	// 首次启动时按可用屏幕收缩：教室常见的 1280x720 / 1366x768 投影下，
+	// 默认 1377 像素宽会超出屏幕，右侧按钮被裁掉。
+	if( geometryRestored == false && screen() )
+	{
+		const auto available = screen()->availableGeometry();
+		const auto maxWidth = static_cast<int>( available.width() * 0.95 );
+		const auto maxHeight = static_cast<int>( available.height() * 0.95 );
+		resize( qMin( width(), maxWidth ), qMin( height(), maxHeight ) );
+		move( available.center() - rect().center() );
+	}
 
 	// add widgets to status bar
 	ui->statusBar->addWidget( ui->panelButtons );
