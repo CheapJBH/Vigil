@@ -128,16 +128,28 @@ if [ -n "$DLLDIR_GCC" ] && [ -d "$DLLDIR_GCC" ]; then
 fi
 copy_if_present "$MINGW_PREFIX"/bin/libstdc++-6.dll "$MINGW_PREFIX"/bin/libgcc_s_seh-1.dll
 
-# QCA 加密插件（没有它 KeyFile 认证不可用）
+# QCA 加密插件（没有它 KeyFile / RSA 认证不可用）
 mkdir -p "$STAGING/crypto"
 for cand in \
 	"$MINGW_PREFIX/lib/qca-qt6/crypto/libqca-ossl.dll" \
 	"$MINGW_PREFIX/lib/qca-qt6/libqca-ossl.dll" \
 	"$MINGW_PREFIX/lib/qca/crypto/libqca-ossl.dll" \
-	"$MINGW_PREFIX/plugins/crypto/libqca-ossl.dll"
+	"$MINGW_PREFIX/plugins/crypto/libqca-ossl.dll" \
+	"$MINGW_PREFIX/lib/qca-qt6/crypto/libqca-ossl-qt6.dll" \
+	"$MINGW_PREFIX/bin/libqca-ossl.dll"
 do
 	[ -e "$cand" ] && cp "$cand" "$STAGING/crypto/" && break
 done
+if [ ! -e "$STAGING/crypto/libqca-ossl.dll" ]; then
+	# 路径随 QCA 版本变化，最后全盘兜底
+	ossl=$(find "$MINGW_PREFIX" -iname '*qca*ossl*.dll' 2>/dev/null | head -1)
+	if [ -n "$ossl" ]; then
+		cp "$ossl" "$STAGING/crypto/libqca-ossl.dll"
+	else
+		echo "!! qca-ossl plugin not found; dumping QCA layout for diagnosis" >&2
+		find "$MINGW_PREFIX" -iname '*qca*' -maxdepth 6 2>/dev/null | head -40 >&2
+	fi
+fi
 [ -e "$STAGING/libqca-ossl.dll" ] && mv "$STAGING/libqca-ossl.dll" "$STAGING/crypto/"
 
 # Qt 运行库
