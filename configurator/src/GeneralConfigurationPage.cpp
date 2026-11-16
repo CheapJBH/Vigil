@@ -70,6 +70,15 @@ GeneralConfigurationPage::GeneralConfigurationPage() :
 
 	ui->uiLanguage->addItems( languages );
 
+	// 当前配置的语言可能不在上面的列表里（例如代码默认值 "System (zh_CN)"）。
+	// 如果直接让它显示第一项，用户点一次"应用"就会把语言写回空值（又变英文）。
+	// 这里把配置值本身作为一个可选项补进去，保证保存时不会丢。
+	const auto configuredLanguage = VigilCore::config().uiLanguage();
+	if( configuredLanguage.isEmpty() == false && ui->uiLanguage->findText( configuredLanguage ) < 0 )
+	{
+		ui->uiLanguage->insertItem( 0, configuredLanguage );
+	}
+
 	const auto backends = VigilCore::userGroupsBackendManager().availableBackends();
 	if (backends.count() <= 0)
 	{
