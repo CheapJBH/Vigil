@@ -1,0 +1,101 @@
+name: "NetGuard self-test"
+
+# 在真实 Windows runner 上验证网络白名单脚本：
+#   1. 语法可加载
+#   2. DryRun 输出的规则集合符合策略
+#   3. 实际创建防火墙规则后能查到
+#   4. -Clear 能干净撤销
+# 不修改出站默认动作，避免CI自身断网。
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "tools/netguard/**"
+      - ".github/workflows/netguard-test.yml"
+
+jobs:
+  selftest:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: PowerShell syntax check
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($f in @('tools/netguard/VigilNetGuard.ps1','tools/netguard/VigilNetGuardDaemon.ps1')) {
+            $err = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $f), [ref]$null, [ref]$err) | Out-Null
+            if ($err.Count -gt 0) {
+              $err | ForEach-Object { Write-Host "ERROR $f:$($_.Extent.StartLineNumber) $($_.Message)" }
+              throw "syntax errors in $f"
+            }
+            Write-Host "OK  $f"
+          }
+
+      - name: Prepare test policy
+        shell: pwsh
+        run: |
+          $p = Get-Content tools/netguard/netguard-policy.example.json -Raw | ConvertFrom-Json
+          $p.domains = @()
+          $p.ports = @()
+          $p.ips = @('127.0.0.1')
+          $p.programs = @()
+          $p.lanCidrs = @('172.17.202.0/24')
+          $p | ConvertTo-Json -Depth 6 | Set-Content netguard-test-policy.json -Encoding UTF8
+          Get-Content netguard-test-policy.json
+
+      - name: Dry run
+        shell: pwsh
+        run: |
+          $out = .\tools\netguard\VigilNetGuard.ps1 -Policy .\netguard-test-policy.json -DryRun -SkipDefaultAction 2>&1
+          $out | Out-String | Write-Host
+          if ($out -notmatch 'dry-run') { throw "DryRun produced no rule output" }
+
+      - name: Apply rules (without changing default action)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          .\tools\netguard\VigilNetGuard.ps1 -Policy .\netguard-test-policy.json -SkipDefaultAction
+          $rules = @(Get-NetFirewallRule -Group 'Vigil NetGuard')
+          Write-Host "created rules: $($rules.Count)"
+          $rules | Select-Object DisplayName, Direction, Action, Enabled | Format-Table -AutoSize
+          if ($rules.Count -eq 0) { throw "no firewall rules created" }
+          $lan = $rules | Where-Object DisplayName -like '*lan-cidrs*'
+          if (-not $lan) { throw "lan rule missing" }
+
+      - name: Verify no duplicate rules on re-apply
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $before = @(Get-NetFirewallRule -Group 'Vigil NetGuard').Count
+          .\tools\netguard\VigilNetGuard.ps1 -Policy .\netguard-test-policy.json -SkipDefaultAction
+          $after = @(Get-NetFirewallRule -Group 'Vigil NetGuard').Count
+          Write-Host "before=$before after=$after"
+          if ($before -ne $after) { throw "rules are not idempotent ($before -> $after)" }
+
+      - name: Status
+        shell: pwsh
+        run: .\tools\netguard\VigilNetGuard.ps1 -Status
+
+      - name: Clear and verify cleanup
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          .\tools\netguard\VigilNetGuard.ps1 -Clear
+          $left = @(Get-NetFirewallRule -Group 'Vigil NetGuard' -ErrorAction SilentlyContinue)
+          Write-Host "remaining rules: $($left.Count)"
+          if ($left.Count -ne 0) { throw "rules were not removed" }
+
+      - name: Install and remove daemon task
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          .\tools\netguard\VigilNetGuardDaemon.ps1 -Install
+          $t = Get-ScheduledTask -TaskName 'VigilNetGuard' -ErrorAction Stop
+          Write-Host "task state: $($t.State)"
+          .\tools\netguard\VigilNetGuardDaemon.ps1 -Uninstall
+          if (Get-ScheduledTask -TaskName 'VigilNetGuard' -ErrorAction SilentlyContinue) {
+            throw "scheduled task not removed"
+          }
