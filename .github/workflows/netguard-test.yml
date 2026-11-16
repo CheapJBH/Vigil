@@ -99,3 +99,53 @@ jobs:
           if (Get-ScheduledTask -TaskName 'VigilNetGuard' -ErrorAction SilentlyContinue) {
             throw "scheduled task not removed"
           }
+
+      - name: Guard - create throwaway service
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & sc.exe create VigilGuardTest binPath= "C:\Windows\System32\cmd.exe /c exit" start= demand | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "sc create failed" }
+          Get-Service VigilGuardTest | Format-List Name, Status, StartType
+
+      - name: Guard - harden blocks config changes
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          .\tools\netguard\VigilGuard.ps1 -Harden -ServiceName VigilGuardTest
+          $sddl = (& sc.exe sdshow VigilGuardTest) -join ''
+          Write-Host "SDDL: $sddl"
+          if ($sddl -match 'CCLCSWRPWPDTLOCRSDRCWDWO;;;BA') {
+            throw "administrators still hold full control"
+          }
+          if ($sddl -notmatch 'CCLCSWRPLOCRRCWD;;;BA') {
+            throw "expected restricted admin ACE not found"
+          }
+          # 管理员已失去 SERVICE_CHANGE_CONFIG，改启动类型应被拒绝
+          & sc.exe config VigilGuardTest start= disabled | Out-Null
+          Write-Host "sc config exit code: $LASTEXITCODE"
+          if ($LASTEXITCODE -eq 0) { throw "administrator was able to change service config" }
+
+      - name: Guard - password gate
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          .\tools\netguard\VigilGuard.ps1 -Install -Password 'test-pass-123' -ServiceName VigilGuardTest
+          .\tools\netguard\VigilGuard.ps1 -Status -ServiceName VigilGuardTest
+          & .\tools\netguard\VigilGuard.ps1 -Release -Password 'wrong-pass' -ServiceName VigilGuardTest
+          if ($LASTEXITCODE -eq 0) { throw "wrong password was accepted" }
+          .\tools\netguard\VigilGuard.ps1 -Release -Password 'test-pass-123' -ServiceName VigilGuardTest
+          $sddl = (& sc.exe sdshow VigilGuardTest) -join ''
+          Write-Host "restored SDDL: $sddl"
+          if ($sddl -notmatch 'CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA') {
+            throw "administrator permissions were not restored"
+          }
+
+      - name: Guard - cleanup
+        shell: pwsh
+        run: |
+          & sc.exe stop VigilGuardTest | Out-Null
+          & sc.exe delete VigilGuardTest | Out-Null
+          Remove-Item 'HKLM:\SOFTWARE\VigilGuard' -Recurse -Force -ErrorAction SilentlyContinue
+          $task = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Cryptography').MachineGuid
+          Write-Host "cleanup done on machine $task"
