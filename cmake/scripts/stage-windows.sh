@@ -195,6 +195,8 @@ cp "$SRCDIR/README.md" "$STAGING/README.TXT" 2>/dev/null || true
 # NSIS 资源目录（注意用 src/. 形式，避免已存在时复制成 nsis/nsis）
 mkdir -p "$STAGING/nsis"
 cp -rf "$SRCDIR/nsis/." "$STAGING/nsis/" 2>/dev/null || true
+# makensis 在 CI 上无法正确解析相对子目录，资源必须与 vigil.nsi 同目录
+cp -f "$SRCDIR/nsis"/*.bmp "$SRCDIR/nsis"/*.ico "$STAGING/" 2>/dev/null || true
 mkdir -p "$STAGING/classroom-teacher" "$STAGING/classroom-student"
 cp -rf "$SRCDIR/tools/classroom-setup/teacher/." "$STAGING/classroom-teacher/" 2>/dev/null || true
 cp -rf "$SRCDIR/tools/classroom-setup/student/." "$STAGING/classroom-student/" 2>/dev/null || true
@@ -210,7 +212,7 @@ fi
 # ---- 关键文件校验 -------------------------------------------------------
 for f in \
 	vigil-server.exe vigil-master.exe vigil-cli.exe vigil-core.dll \
-	Qt6Core.dll platforms/qwindows.dll nsis/welcome-page.bmp vigil.nsi
+	Qt6Core.dll platforms/qwindows.dll welcome-page.bmp vigil.nsi
 do
 	[ -e "$STAGING/$f" ] || note_missing "$f"
 done
