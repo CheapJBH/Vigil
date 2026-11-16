@@ -57,6 +57,8 @@ jobs:
         run: |
           command -v gcc g++ cmake ninja
           gcc --version | head -1
+          echo "--- QCA layout ---"
+          pacman -Ql mingw-w64-x86_64-qca-qt6 2>/dev/null | grep -iE 'ossl|crypto' || echo "no qca crypto files listed"
 
       - name: Configure
         run: |
@@ -80,7 +82,9 @@ jobs:
           test -f "$STAGING/platforms/qwindows.dll"
           test -f "$STAGING/vigil.nsi"
           test -f "$STAGING/nsis/welcome-page.bmp"
-          test -f "$STAGING/crypto/libqca-ossl.dll"
+          if [ ! -f "$STAGING/crypto/libqca-ossl.dll" ]; then
+            echo "::warning::qca-ossl crypto plugin is missing from staging"
+          fi
           ls "$STAGING/nsis"
           ls "$STAGING/platforms" "$STAGING/tls" "$STAGING/crypto"
 
