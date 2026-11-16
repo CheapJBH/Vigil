@@ -9,17 +9,25 @@
 #   SRCDIR         源码目录
 #   BUILDDIR       构建目录
 #   MINGW_PREFIX   MinGW 前缀（如 /mingw64）
-#   DLLDIR_GCC     GCC 运行时 DLL 目录
 #   DLL_GCC        GCC 运行时 DLL 文件名
 #   DLL_DDENGINE   ddengine DLL 文件名
-#   QT_PLUGIN_DIR  Qt 插件目录
 #   STRIP          strip 命令（可为空）
+#
+# 注意：Qt 插件目录 / GCC 运行时目录一律在这里探测。
+# CMake 在 Windows 上把 "/mingw64/..." 解析成当前盘根目录（C:/mingw64），
+# 任何 EXISTS()/file(GLOB) 判断都会得到错误结果。
 
 set -uo pipefail
 
 : "${STAGING:?}" "${SRCDIR:?}" "${BUILDDIR:?}" "${MINGW_PREFIX:?}"
-: "${DLLDIR_GCC:?}" "${DLL_GCC:?}" "${DLL_DDENGINE:?}" "${QT_PLUGIN_DIR:?}"
+: "${DLL_GCC:?}" "${DLL_DDENGINE:?}"
 STRIP="${STRIP:-}"
+QT_PLUGIN_DIR="${QT_PLUGIN_DIR:-}"
+DLLDIR_GCC="${DLLDIR_GCC:-}"
+
+MISSING=()
+
+note_missing() { MISSING+=("$1"); }
 
 # CMake 在 Windows 上给出的是 D:/... 形式，MSYS2 的 bash 不一定认，
 # 统一转成 POSIX 路径后再切换目录。
@@ -32,6 +40,38 @@ cd "$BUILDDIR" || { echo "FATAL: cannot cd to $BUILDDIR"; exit 1; }
 
 echo "== pwd=$(pwd)"
 echo "== staging into $STAGING"
+
+# ---- 路径探测（必须在 bash 里做）----------------------------------------
+if [ -z "$QT_PLUGIN_DIR" ] || [ ! -d "$QT_PLUGIN_DIR" ]; then
+	QT_PLUGIN_DIR=""
+	for cand in \
+		"$MINGW_PREFIX/share/qt6/plugins" \
+		"$MINGW_PREFIX/lib/qt6/plugins" \
+		"$MINGW_PREFIX/plugins"
+	do
+		if [ -d "$cand" ]; then QT_PLUGIN_DIR="$cand"; break; fi
+	done
+	if [ -z "$QT_PLUGIN_DIR" ] && command -v qtpaths6 >/dev/null 2>&1; then
+		QT_PLUGIN_DIR=$(qtpaths6 --query QT_INSTALL_PLUGINS 2>/dev/null || true)
+	fi
+fi
+echo "== QT_PLUGIN_DIR=$QT_PLUGIN_DIR"
+
+if [ -z "$DLLDIR_GCC" ] || [ ! -d "$DLLDIR_GCC" ]; then
+	DLLDIR_GCC=""
+	for cand in \
+		"$MINGW_PREFIX/lib/gcc/x86_64-w64-mingw32"/* \
+		"$MINGW_PREFIX"/lib/gcc/*/*
+	do
+		if [ -d "$cand" ] && [ -f "$cand/libstdc++-6.dll" ]; then
+			DLLDIR_GCC="$cand"; break
+		fi
+		if [ -d "$cand" ] && compgen -G "$cand/libstdc++*.dll" >/dev/null; then
+			DLLDIR_GCC="$cand"; break
+		fi
+	done
+fi
+echo "== DLLDIR_GCC=$DLLDIR_GCC"
 
 rm -rf "$STAGING"
 mkdir -p "$STAGING"
@@ -79,14 +119,26 @@ copy_if_present "$MINGW_PREFIX"/bin/libvncclient.dll "$MINGW_PREFIX"/bin/libvncs
 copy_if_present "$MINGW_PREFIX"/bin/zlib1.dll "$MINGW_PREFIX"/lib/zlib1.dll
 copy_if_present "$MINGW_PREFIX"/bin/libwinpthread-1.dll "$MINGW_PREFIX"/lib/libwinpthread-1.dll
 copy_if_present "$MINGW_PREFIX"/bin/libssp-*.dll "$MINGW_PREFIX"/lib/libssp-*.dll
-copy_if_present "$DLLDIR_GCC/$DLL_GCC"
-copy_if_present "$DLLDIR_GCC/libstdc++-6.dll"
-copy_if_present "$DLLDIR_GCC/libgcc_s_seh-1.dll"
 
-# QCA 加密插件
+# GCC 运行时（缺了程序无法启动）
+if [ -n "$DLLDIR_GCC" ] && [ -d "$DLLDIR_GCC" ]; then
+	for f in "$DLLDIR_GCC"/libstdc++*.dll "$DLLDIR_GCC"/libgcc_s*.dll; do
+		[ -e "$f" ] && cp "$f" "$STAGING/"
+	done
+fi
+copy_if_present "$MINGW_PREFIX"/bin/libstdc++-6.dll "$MINGW_PREFIX"/bin/libgcc_s_seh-1.dll
+
+# QCA 加密插件（没有它 KeyFile 认证不可用）
 mkdir -p "$STAGING/crypto"
-copy_if_present "$MINGW_PREFIX"/lib/qca-qt6/crypto/libqca-ossl.dll
-mv "$STAGING"/libqca-ossl.dll "$STAGING/crypto/" 2>/dev/null || true
+for cand in \
+	"$MINGW_PREFIX/lib/qca-qt6/crypto/libqca-ossl.dll" \
+	"$MINGW_PREFIX/lib/qca-qt6/libqca-ossl.dll" \
+	"$MINGW_PREFIX/lib/qca/crypto/libqca-ossl.dll" \
+	"$MINGW_PREFIX/plugins/crypto/libqca-ossl.dll"
+do
+	[ -e "$cand" ] && cp "$cand" "$STAGING/crypto/" && break
+done
+[ -e "$STAGING/libqca-ossl.dll" ] && mv "$STAGING/libqca-ossl.dll" "$STAGING/crypto/"
 
 # Qt 运行库
 copy_if_present \
@@ -99,12 +151,23 @@ copy_if_present \
 	"$MINGW_PREFIX/bin/Qt6HttpServer.dll" \
 	"$MINGW_PREFIX/bin/Qt6WebSockets.dll"
 
-# Qt 插件
-mkdir -p "$STAGING/imageformats" "$STAGING/platforms" "$STAGING/styles" "$STAGING/tls"
-cp "$QT_PLUGIN_DIR"/imageformats/qjpeg.dll "$STAGING/imageformats/" 2>/dev/null || true
-cp "$QT_PLUGIN_DIR"/platforms/qwindows.dll "$STAGING/platforms/" 2>/dev/null || true
-cp "$QT_PLUGIN_DIR"/styles/*.dll "$STAGING/styles/" 2>/dev/null || true
-cp "$QT_PLUGIN_DIR"/tls/qopensslbackend.dll "$STAGING/tls/" 2>/dev/null || true
+# Qt 插件：整目录复制，避免遗漏后端（qwindows / qjpeg / 样式 / TLS）
+if [ -n "$QT_PLUGIN_DIR" ] && [ -d "$QT_PLUGIN_DIR" ]; then
+	for sub in platforms imageformats styles tls iconengines networkinformation platformthemes; do
+		if [ -d "$QT_PLUGIN_DIR/$sub" ]; then
+			mkdir -p "$STAGING/$sub"
+			cp "$QT_PLUGIN_DIR/$sub"/*.dll "$STAGING/$sub/" 2>/dev/null
+		fi
+	done
+fi
+if [ ! -f "$STAGING/platforms/qwindows.dll" ]; then
+	# 兜底：MSYS2 不同版本路径略有差异
+	qw=$(find "$MINGW_PREFIX" -name qwindows.dll -path '*platforms*' 2>/dev/null | head -1)
+	if [ -n "$qw" ]; then
+		mkdir -p "$STAGING/platforms"
+		cp "$qw" "$STAGING/platforms/"
+	fi
+fi
 
 # 瘦身（失败不影响产物）
 if [ -n "$STRIP" ]; then
@@ -117,10 +180,50 @@ cp "$SRCDIR/COPYING" "$STAGING/" 2>/dev/null || true
 cp "$SRCDIR/COPYING" "$STAGING/LICENSE.TXT" 2>/dev/null || true
 cp "$SRCDIR/README.md" "$STAGING/README.TXT" 2>/dev/null || true
 
-cp -ra "$SRCDIR/nsis" "$STAGING/" 2>/dev/null || true
-cp -ra "$SRCDIR/tools/classroom-setup/teacher" "$STAGING/classroom-teacher" 2>/dev/null || true
-cp -ra "$SRCDIR/tools/classroom-setup/student" "$STAGING/classroom-student" 2>/dev/null || true
-cp "$BUILDDIR/nsis/vigil.nsi" "$STAGING/" 2>/dev/null || true
+# NSIS 资源目录（注意用 src/. 形式，避免已存在时复制成 nsis/nsis）
+mkdir -p "$STAGING/nsis"
+cp -rf "$SRCDIR/nsis/." "$STAGING/nsis/" 2>/dev/null || true
+mkdir -p "$STAGING/classroom-teacher" "$STAGING/classroom-student"
+cp -rf "$SRCDIR/tools/classroom-setup/teacher/." "$STAGING/classroom-teacher/" 2>/dev/null || true
+cp -rf "$SRCDIR/tools/classroom-setup/student/." "$STAGING/classroom-student/" 2>/dev/null || true
+
+# 安装脚本本体（configure_file 产物，位置随 CMake 版本略有差异）
+if [ -f "$BUILDDIR/nsis/vigil.nsi" ]; then
+	cp "$BUILDDIR/nsis/vigil.nsi" "$STAGING/"
+else
+	nsi=$(find "$BUILDDIR" -name vigil.nsi -not -path '*/vigil-win*/*' 2>/dev/null | head -1)
+	[ -n "$nsi" ] && cp "$nsi" "$STAGING/"
+fi
+
+# ---- 关键文件校验 -------------------------------------------------------
+for f in \
+	vigil-server.exe vigil-master.exe vigil-cli.exe vigil-core.dll \
+	Qt6Core.dll platforms/qwindows.dll nsis/welcome-page.bmp vigil.nsi
+do
+	[ -e "$STAGING/$f" ] || note_missing "$f"
+done
+[ -e "$STAGING"/libstdc++*.dll ] || note_missing "libstdc++-6.dll"
+[ -e "$STAGING"/libgcc_s*.dll ] || note_missing "libgcc_s_seh-1.dll"
+[ -e "$STAGING/crypto/libqca-ossl.dll" ] || note_missing "crypto/libqca-ossl.dll"
+[ -e "$STAGING/tls/qopensslbackend.dll" ] || note_missing "tls/qopensslbackend.dll"
 
 echo "== staged files: $(find "$STAGING" -type f | wc -l)"
 find "$STAGING" -maxdepth 1 -ls
+
+if [ ${#MISSING[@]} -gt 0 ]; then
+	echo "!! MISSING required files:" >&2
+	for m in "${MISSING[@]}"; do echo "   - $m" >&2; done
+	# 致命项：缺了安装包必然不可用
+	for f in "$STAGING/platforms/qwindows.dll" "$STAGING/vigil-core.dll"; do
+		if [ ! -e "$f" ]; then
+			echo "FATAL: essential runtime file missing: $f" >&2
+			exit 1
+		fi
+	done
+	if [ ! -e "$STAGING/vigil.nsi" ]; then
+		echo "FATAL: vigil.nsi not staged" >&2
+		exit 1
+	fi
+fi
+
+echo "== staging OK"
