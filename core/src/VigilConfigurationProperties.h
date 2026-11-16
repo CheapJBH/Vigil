@@ -60,7 +60,7 @@
 	OP( VigilConfiguration, VigilCore::config(), int, vncConnectionSocketKeepaliveCount, setVncConnectionSocketKeepaliveCount, "SocketKeepaliveCount", "VncConnection", VncConnectionConfiguration::DefaultSocketKeepaliveCount, Configuration::Property::Flag::Hidden )			\
 
 #define FOREACH_VIGIL_UI_CONFIG_PROPERTY(OP)				\
-	OP( VigilConfiguration, VigilCore::config(), QString, uiLanguage, setUiLanguage, "Language", "UI", QString(), Configuration::Property::Flag::Standard ) \
+	OP( VigilConfiguration, VigilCore::config(), QString, uiLanguage, setUiLanguage, "Language", "UI", QStringLiteral("System (zh_CN)"), Configuration::Property::Flag::Standard ) \
 	OP( VigilConfiguration, VigilCore::config(), VigilCore::UiStyle, uiStyle, setUiStyle, "Style", "UI", QVariant::fromValue(VigilCore::UiStyle::Fusion), Configuration::Property::Flag::Standard ) \
 	OP( VigilConfiguration, VigilCore::config(), VigilCore::UiColorScheme, uiColorScheme, setUiColorScheme, "ColorScheme", "UI", QVariant::fromValue(VigilCore::UiColorScheme::System), Configuration::Property::Flag::Standard )
 
