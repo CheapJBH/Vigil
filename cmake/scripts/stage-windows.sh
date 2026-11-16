@@ -199,6 +199,45 @@ if [ ! -f "$STAGING/platforms/qwindows.dll" ]; then
 	fi
 fi
 
+# ---------------------------------------------------------------------------
+# 递归收集 MinGW 运行时依赖
+#   MSYS2 的 Qt6Core 是动态链接的：pcre2 / zstd / double-conversion / b2 /
+#   harfbuzz / freetype / glib / intl / iconv / brotli … 缺任何一个，
+#   程序启动就是 0xC0000135 (STATUS_DLL_NOT_FOUND)。
+#   手工列举永远会漏，所以用 ntldd -R 递归解析整条依赖链。
+# ---------------------------------------------------------------------------
+if command -v ntldd >/dev/null 2>&1; then
+	collect_deps() {
+		local target="$1"
+		[ -f "$target" ] || return 0
+		PATH="$STAGING:$PATH" ntldd -R "$target" 2>/dev/null | awk '/=>/ { print $3 }' | while IFS= read -r dll; do
+			[ -n "$dll" ] || continue
+			local p
+			p=$(printf '%s' "$dll" | tr '\\' '/')
+			case "$p" in
+				*mingw64/bin/*|*mingw64/lib/*)
+					local base
+					base=$(basename "$p")
+					[ -f "$STAGING/$base" ] || cp "$dll" "$STAGING/" 2>/dev/null || true
+					;;
+			esac
+		done
+	}
+
+	while IFS= read -r f; do
+		collect_deps "$f"
+	done < <(find "$STAGING" -maxdepth 2 -type f \( -name '*.exe' -o -name '*.dll' \))
+
+	# 第二轮：新拷进来的 DLL 自身可能还有依赖
+	while IFS= read -r f; do
+		collect_deps "$f"
+	done < <(find "$STAGING" -maxdepth 1 -type f -name '*.dll')
+
+	echo "-- recursive dependency pass done --"
+else
+	echo "!! ntldd not found; dependency set may be incomplete" >&2
+fi
+
 # 瘦身（失败不影响产物）
 if [ -n "$STRIP" ]; then
 	"$STRIP" "$STAGING"/*.dll "$STAGING"/*.exe \
@@ -238,6 +277,23 @@ done
 [ -e "$STAGING"/libgcc_s*.dll ] || note_missing "libgcc_s_seh-1.dll"
 [ -e "$STAGING/crypto/libqca-ossl.dll" ] || note_missing "crypto/libqca-ossl.dll"
 [ -e "$STAGING/tls/qopensslbackend.dll" ] || note_missing "tls/qopensslbackend.dll"
+
+# ---- 依赖闭环校验 -------------------------------------------------------
+# exe 与 DLL 同目录，ntldd 需要把 STAGING 放进 PATH 才能解析本地依赖
+if command -v ntldd >/dev/null 2>&1; then
+	unresolved=""
+	while IFS= read -r f; do
+		miss=$(PATH="$STAGING:$PATH" ntldd -R "$f" 2>/dev/null | grep -i 'not found' || true)
+		if [ -n "$miss" ]; then
+			unresolved="${unresolved}"$'\n'"  $(basename "$f"):"$'\n'"$miss"
+		fi
+	done < <(find "$STAGING" -maxdepth 2 -type f \( -name '*.exe' -o -name '*.dll' \) -not -path "$STAGING/nsis/*")
+	if [ -n "$unresolved" ]; then
+		echo "!! unresolved DLL dependencies:$unresolved" >&2
+		exit 1
+	fi
+	echo "== dependency closure OK"
+fi
 
 echo "== staged files: $(find "$STAGING" -type f | wc -l)"
 find "$STAGING" -maxdepth 1 -ls
