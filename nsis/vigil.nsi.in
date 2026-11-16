@@ -58,17 +58,20 @@ RequestExecutionLevel admin
   !define NSIS_DIR "."
 !endif
 !cd "${NSIS_DIR}"
+!echo "== NSIS_DIR=${NSIS_DIR} __FILEDIR__=${__FILEDIR__}"
+!system 'cmd /c dir /b *.bmp *.ico 1>&2'
+!system 'cmd /c dir /b nsis 1>&2'
 
 !define MUI_ABORTWARNING
 !define MUI_UNABORTWARNING
 
-!define MUI_WELCOMEFINISHPAGE_BITMAP "nsis/welcome-page.bmp"
-!define MUI_UNWELCOMEFINISHPAGE_BITMAP "nsis/welcome-page.bmp"
+!define MUI_WELCOMEFINISHPAGE_BITMAP "welcome-page.bmp"
+!define MUI_UNWELCOMEFINISHPAGE_BITMAP "welcome-page.bmp"
 
-!define MUI_ICON "nsis/installer.ico"
-!define MUI_UNICON "nsis/uninstaller.ico"
+!define MUI_ICON "installer.ico"
+!define MUI_UNICON "uninstaller.ico"
 !define MUI_HEADERIMAGE
-!define MUI_HEADERIMAGE_BITMAP "nsis/header.bmp"
+!define MUI_HEADERIMAGE_BITMAP "header.bmp"
 !define MUI_HEADERIMAGE_RIGHT
 
 !define MUI_LANGDLL_REGISTRY_ROOT "${REG_ROOT}"
