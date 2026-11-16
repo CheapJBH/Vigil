@@ -115,7 +115,7 @@ void SlideshowPanel::switchViewMode()
 	{
 		m_originalParent = parentWidget();
 		setParent(nullptr);
-		setWindowTitle(tr("Vigil Master – Slideshow"));
+		setWindowTitle(tr("Vigil 教师端 – 幻灯片"));
 		showMaximized();
 	}
 	else
