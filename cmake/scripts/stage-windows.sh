@@ -202,40 +202,59 @@ fi
 # ---------------------------------------------------------------------------
 # 递归收集 MinGW 运行时依赖
 #   MSYS2 的 Qt6Core 是动态链接的：pcre2 / zstd / double-conversion / b2 /
-#   harfbuzz / freetype / glib / intl / iconv / brotli … 缺任何一个，
-#   程序启动就是 0xC0000135 (STATUS_DLL_NOT_FOUND)。
-#   手工列举永远会漏，所以用 ntldd -R 递归解析整条依赖链。
+#   harfbuzz / freetype / glib / intl / iconv / brotli / md4c / zlib …
+#   缺任何一个，程序启动就是 0xC0000135 (STATUS_DLL_NOT_FOUND)。
+#   手工列举永远会漏，所以用 objdump -p 解析 PE 导入表后递归补齐。
+#   （不用 ntldd：MSYS2 镜像上该包偶发校验失败，binutils 本来就有。）
 # ---------------------------------------------------------------------------
-if command -v ntldd >/dev/null 2>&1; then
-	collect_deps() {
-		local target="$1"
-		[ -f "$target" ] || return 0
-		PATH="$STAGING:$PATH" ntldd -R "$target" 2>/dev/null | awk '/=>/ { print $3 }' | while IFS= read -r dll; do
-			[ -n "$dll" ] || continue
-			local p
-			p=$(printf '%s' "$dll" | tr '\\' '/')
-			case "$p" in
-				*mingw64/bin/*|*mingw64/lib/*)
-					local base
-					base=$(basename "$p")
-					[ -f "$STAGING/$base" ] || cp "$dll" "$STAGING/" 2>/dev/null || true
-					;;
-			esac
+if command -v objdump >/dev/null 2>&1; then
+	resolve_deps() {
+		local -a queue=("$@")
+		local -a visited=()
+		while [ ${#queue[@]} -gt 0 ]; do
+			local cur="${queue[0]}"
+			queue=("${queue[@]:1}")
+			[ -f "$cur" ] || continue
+			local skip=0 d
+			for d in "${visited[@]}"; do
+				if [ "$d" = "$cur" ]; then skip=1; break; fi
+			done
+			[ "$skip" -eq 1 ] && continue
+			visited+=("$cur")
+
+			local names
+			names=$(objdump -p "$cur" 2>/dev/null | awk '/DLL Name:/ {print $3}')
+			[ -z "$names" ] && continue
+
+			local name src cand
+			while IFS= read -r name; do
+				[ -n "$name" ] || continue
+				src=""
+				for cand in \
+					"$STAGING/$name" \
+					"$STAGING/plugins/$name" \
+					"$STAGING/platforms/$name" \
+					"$MINGW_PREFIX/bin/$name" \
+					"$MINGW_PREFIX/lib/$name"
+				do
+					[ -f "$cand" ] && src="$cand" && break
+				done
+				[ -z "$src" ] && continue
+				if [ ! -f "$STAGING/$name" ]; then
+					cp "$src" "$STAGING/" 2>/dev/null && queue+=("$STAGING/$name")
+				fi
+			done <<< "$names"
 		done
 	}
 
-	while IFS= read -r f; do
-		collect_deps "$f"
-	done < <(find "$STAGING" -maxdepth 2 -type f \( -name '*.exe' -o -name '*.dll' \))
-
-	# 第二轮：新拷进来的 DLL 自身可能还有依赖
-	while IFS= read -r f; do
-		collect_deps "$f"
-	done < <(find "$STAGING" -maxdepth 1 -type f -name '*.dll')
-
-	echo "-- recursive dependency pass done --"
+	deps_targets=()
+	while IFS= read -r f; do deps_targets+=("$f"); done < <(
+		find "$STAGING" -maxdepth 2 -type f \( -name '*.exe' -o -name '*.dll' \)
+	)
+	resolve_deps "${deps_targets[@]}"
+	echo "-- dependency closure resolved ($(find "$STAGING" -maxdepth 1 -name '*.dll' | wc -l) root DLLs) --"
 else
-	echo "!! ntldd not found; dependency set may be incomplete" >&2
+	echo "!! objdump not found; dependency set may be incomplete" >&2
 fi
 
 # 瘦身（失败不影响产物）
@@ -279,14 +298,20 @@ done
 [ -e "$STAGING/tls/qopensslbackend.dll" ] || note_missing "tls/qopensslbackend.dll"
 
 # ---- 依赖闭环校验 -------------------------------------------------------
-# exe 与 DLL 同目录，ntldd 需要把 STAGING 放进 PATH 才能解析本地依赖
-if command -v ntldd >/dev/null 2>&1; then
+# 凡是存在于 $MINGW_PREFIX/bin 的导入项，都必须被拷进 staging；
+# 其余（KERNEL32 / USER32 等系统 DLL）由 Windows 自带，不算缺失。
+if command -v objdump >/dev/null 2>&1; then
 	unresolved=""
 	while IFS= read -r f; do
-		miss=$(PATH="$STAGING:$PATH" ntldd -R "$f" 2>/dev/null | grep -i 'not found' || true)
-		if [ -n "$miss" ]; then
-			unresolved="${unresolved}"$'\n'"  $(basename "$f"):"$'\n'"$miss"
-		fi
+		names=$(objdump -p "$f" 2>/dev/null | awk '/DLL Name:/ {print $3}')
+		[ -z "$names" ] && continue
+		while IFS= read -r name; do
+			[ -n "$name" ] || continue
+			[ -f "$STAGING/$name" ] && continue
+			if [ -f "$MINGW_PREFIX/bin/$name" ] || [ -f "$MINGW_PREFIX/lib/$name" ]; then
+				unresolved="${unresolved}"$'\n'"  $(basename "$f") needs $name"
+			fi
+		done <<< "$names"
 	done < <(find "$STAGING" -maxdepth 2 -type f \( -name '*.exe' -o -name '*.dll' \) -not -path "$STAGING/nsis/*")
 	if [ -n "$unresolved" ]; then
 		echo "!! unresolved DLL dependencies:$unresolved" >&2
