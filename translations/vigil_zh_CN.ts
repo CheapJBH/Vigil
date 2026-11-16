@@ -2549,7 +2549,7 @@ Make sure that the names of the keys belonging to each other are identical on al
     </message>
     <message>
         <source>Query user groups from user attribute</source>
-        <translation type="unfinished"></translation>
+        <translation>从用户属性查询用户组</translation>
     </message>
     <message>
         <source>Query nested user groups (supported by AD only)</source>
@@ -2597,7 +2597,7 @@ Make sure that the names of the keys belonging to each other are identical on al
     </message>
     <message>
         <source>List all user groups</source>
-        <translation type="unfinished"></translation>
+        <translation>列出所有用户组</translation>
     </message>
     <message>
         <source>List all groups of a user</source>
@@ -2609,7 +2609,7 @@ Make sure that the names of the keys belonging to each other are identical on al
     </message>
     <message>
         <source>List all computers at a specific location</source>
-        <translation type="unfinished"></translation>
+        <translation>列出指定位置的所有计算机</translation>
     </message>
     <message>
         <source>Computers</source>
@@ -3528,31 +3528,31 @@ Press and hold to load arrangement from a file or save current arrangement to a 
     </message>
     <message>
         <source>Monitoring view</source>
-        <translation type="unfinished"></translation>
+        <translation>监控视图</translation>
     </message>
     <message>
         <source>Visibility mode</source>
-        <translation type="unfinished"></translation>
+        <translation>显示模式</translation>
     </message>
     <message>
         <source>Aspect ratio</source>
-        <translation type="unfinished"></translation>
+        <translation>宽高比</translation>
     </message>
     <message>
         <source>Normal</source>
-        <translation type="unfinished"></translation>
+        <translation>正常</translation>
     </message>
     <message>
         <source>Blurred</source>
-        <translation type="unfinished"></translation>
+        <translation>模糊</translation>
     </message>
     <message>
         <source>Hidden</source>
-        <translation type="unfinished"></translation>
+        <translation>隐藏</translation>
     </message>
     <message>
         <source>Grid spacing</source>
-        <translation type="unfinished"></translation>
+        <translation>网格间距</translation>
     </message>
     <message>
         <source>Image quality</source>
@@ -3560,23 +3560,23 @@ Press and hold to load arrangement from a file or save current arrangement to a 
     </message>
     <message>
         <source>Display label</source>
-        <translation type="unfinished"></translation>
+        <translation>显示标签</translation>
     </message>
     <message>
         <source>Refresh rate</source>
-        <translation type="unfinished"></translation>
+        <translation>刷新频率</translation>
     </message>
     <message>
         <source>Grid sizing mode</source>
-        <translation type="unfinished"></translation>
+        <translation>网格尺寸模式</translation>
     </message>
     <message>
         <source>Full-length labels (scales down all thumbnails)</source>
-        <translation type="unfinished"></translation>
+        <translation>完整标签（自动缩小缩略图）</translation>
     </message>
     <message>
         <source>Maximized thumbnails (truncated labels)</source>
-        <translation type="unfinished"></translation>
+        <translation>最大缩略图（标签截断）</translation>
     </message>
     <message>
         <source>Remote access</source>
@@ -3739,15 +3739,15 @@ Press and hold to load arrangement from a file or save current arrangement to a 
     <name>PipeWireVncConfigurationWidget</name>
     <message>
         <source>PipeWire VNC server configuration</source>
-        <translation type="unfinished"></translation>
+        <translation>PipeWire VNC 服务器配置</translation>
     </message>
     <message>
         <source>Remember the screen sharing approval across restarts</source>
-        <translation type="unfinished"></translation>
+        <translation>重启后保留屏幕共享授权</translation>
     </message>
     <message>
         <source>The approval token is stored in the user&apos;s state directory. Any program running as the same user can read it and share the screen without asking.</source>
-        <translation type="unfinished"></translation>
+        <translation>授权令牌保存在用户状态目录中。以同一用户身份运行的任何程序都可以读取它，并在不询问的情况下共享屏幕。</translation>
     </message>
 </context>
 <context>
