@@ -28,7 +28,9 @@
 #include <QAction>
 #include <QApplication>
 #include <QDir>
+#include <QFont>
 #include <QGroupBox>
+#include <QGuiApplication>
 #include <QJsonDocument>
 #include <QLabel>
 #include <QLibraryInfo>
@@ -231,6 +233,21 @@ void VigilCore::setupApplicationParameters()
 
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
 	QApplication::setAttribute( Qt::AA_UseHighDpiPixmaps );
+#else
+	// Windows 上 125% / 150% 缩放常见的非整数倍率：
+	// 默认的 Round 策略会把界面放大到整数倍再缩小，导致字体和图标发虚，
+	// PassThrough 让 Qt 按真实 DPR 渲染。
+	QGuiApplication::setHighDpiScaleFactorRoundingPolicy(
+		Qt::HighDpiScaleFactorRoundingPolicy::PassThrough );
+#endif
+
+#ifdef Q_OS_WIN
+	// 中文界面在 Windows 上默认回退到宋体，与系统 UI 的雅黑不一致且发虚，
+	// 这里只登记字体替换，不改变字号与字重。
+	QFont::insertSubstitution( QStringLiteral("Segoe UI"),
+							   QStringLiteral("Microsoft YaHei UI") );
+	QFont::insertSubstitution( QStringLiteral("MS Shell Dlg 2"),
+							   QStringLiteral("Microsoft YaHei UI") );
 #endif
 }
 
