@@ -93,6 +93,19 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "$exe --version failed with $LASTEXITCODE" }
           }
 
+      - name: Check UI language configuration
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $cli = 'C:\Program Files\Vigil\vigil-cli.exe'
+          Write-Host '--- UI/Language (after install) ---'
+          & $cli config get UI/Language
+          Write-Host "exit=$LASTEXITCODE"
+          & $cli config set UI/Language 'System (zh_CN)'
+          Write-Host '--- UI/Language (after explicit set) ---'
+          & $cli config get UI/Language
+          Write-Host "exit=$LASTEXITCODE"
+
       - name: Launch GUIs and capture screenshots
         shell: pwsh
         run: |
