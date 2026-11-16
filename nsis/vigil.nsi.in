@@ -273,7 +273,7 @@ ${GetParameters} $R0
 ${GetOptions} $R0 "/NoStartMenuFolder" $R1
 ${If} ${Errors}
 CreateDirectory "$SMPROGRAMS\Vigil"
-CreateShortCut "$SMPROGRAMS\Vigil\课堂口令.lnk" "$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" \
+CreateShortCut "$SMPROGRAMS\Vigil\Vigil Classroom Code.lnk" "$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" \
 	'-NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\classroom\VigilTeacherSetup.ps1"' \
 	"$INSTDIR\vigil-master.exe" 0
 ${EndIf}
@@ -290,7 +290,7 @@ ${GetParameters} $R0
 ${GetOptions} $R0 "/NoStartMenuFolder" $R1
 ${If} ${Errors}
 CreateDirectory "$SMPROGRAMS\Vigil"
-CreateShortCut "$SMPROGRAMS\Vigil\绑定课堂.lnk" "$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" \
+CreateShortCut "$SMPROGRAMS\Vigil\Vigil Classroom Join.lnk" "$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" \
 	'-NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\classroom\VigilStudentSetup.ps1"' \
 	"$INSTDIR\vigil-server.exe" 0
 ${EndIf}
@@ -390,8 +390,8 @@ RmDir "$INSTDIR"
 
 Delete "$SMPROGRAMS\Vigil\Vigil Master.lnk"
 Delete "$SMPROGRAMS\Vigil\Vigil Configurator.lnk"
-Delete "$SMPROGRAMS\Vigil\课堂口令.lnk"
-Delete "$SMPROGRAMS\Vigil\绑定课堂.lnk"
+Delete "$SMPROGRAMS\Vigil\Vigil Classroom Code.lnk"
+Delete "$SMPROGRAMS\Vigil\Vigil Classroom Join.lnk"
 Delete "$SMPROGRAMS\Vigil\Uninstall Vigil.lnk"
 Delete "$SMPROGRAMS\Vigil\Vigil Website.lnk"
 RmDir "$SMPROGRAMS\Vigil"
