@@ -1,0 +1,182 @@
+name: Windows smoke test
+
+# 在真实 Windows runner 上：静默安装 -> 校验文件 -> 启动 GUI -> 截屏
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'windows.yml 的 run id（留空 = 最近一次成功）'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  smoke:
+    runs-on: windows-latest
+    steps:
+      - name: Resolve packaging run
+        id: find
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $rid = "${{ inputs.run_id }}".Trim()
+          if (-not $rid) {
+            $r = gh run list --repo "$env:GITHUB_REPOSITORY" --workflow windows.yml --status success --limit 1 --json databaseId | ConvertFrom-Json
+            if (-not $r -or $r.Count -eq 0) { throw "no successful windows.yml run found" }
+            $rid = $r[0].databaseId
+          }
+          Write-Host "using run $rid"
+          "run_id=$rid" >> $env:GITHUB_OUTPUT
+
+      - name: Download installers
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          gh run download ${{ steps.find.outputs.run_id }} --repo "$env:GITHUB_REPOSITORY" -n vigil-windows-x64 --dir dist
+          if (-not (Get-ChildItem -Recurse dist -Filter '*.exe' -ErrorAction SilentlyContinue)) {
+            gh run download ${{ steps.find.outputs.run_id }} --repo "$env:GITHUB_REPOSITORY" --dir dist
+          }
+          Get-ChildItem -Recurse dist -File | Select-Object FullName, Length | Format-Table -AutoSize
+
+      - name: Install teacher edition silently
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Recurse dist -Filter '*teacher*.exe' | Select-Object -First 1
+          if (-not $exe) { throw "teacher setup.exe not found" }
+          Write-Host "installing $($exe.FullName) ($($exe.Length) bytes)"
+          $p = Start-Process -FilePath $exe.FullName -ArgumentList '/S' -Wait -PassThru
+          Write-Host "installer exit code: $($p.ExitCode)"
+          Start-Sleep -Seconds 8
+          if (-not (Test-Path 'C:\Program Files\Vigil')) { throw 'install dir missing' }
+          Get-ChildItem 'C:\Program Files\Vigil' -Recurse -File |
+            Select-Object @{n='rel';e={$_.FullName.Replace('C:\Program Files\Vigil\','')}}, Length |
+            Sort-Object rel | Format-Table -AutoSize
+
+      - name: Verify runtime DLLs present
+        shell: pwsh
+        run: |
+          $root = 'C:\Program Files\Vigil'
+          $must = @(
+            'platforms\qwindows.dll',
+            'libstdc++-6.dll',
+            'libgcc_s_seh-1.dll',
+            'libwinpthread-1.dll',
+            'Qt6Core.dll',
+            'Qt6Widgets.dll',
+            'vigil-cli.exe',
+            'vigil-configurator.exe',
+            'vigil-master.exe'
+          )
+          $missing = @()
+          foreach ($f in $must) {
+            $p = Join-Path $root $f
+            if (Test-Path $p) { Write-Host ("OK    {0,-32} {1,10}" -f $f, (Get-Item $p).Length) }
+            else { Write-Host ("MISS  {0}" -f $f) -ForegroundColor Red; $missing += $f }
+          }
+          if ($missing.Count -gt 0) { throw "missing runtime files: $($missing -join ', ')" }
+
+      - name: CLI smoke (proves DLLs load)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $root = 'C:\Program Files\Vigil'
+          foreach ($exe in @('vigil-cli.exe', 'vigil-wcli.exe')) {
+            $out = & (Join-Path $root $exe) --version 2>&1 | Out-String
+            Write-Host "=== $exe --version (exit $LASTEXITCODE) ==="
+            Write-Host $out
+            if ($LASTEXITCODE -ne 0) { throw "$exe --version failed with $LASTEXITCODE" }
+          }
+
+      - name: Launch GUIs and capture screenshots
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.Windows.Forms
+          Add-Type -AssemblyName System.Drawing
+          New-Item -ItemType Directory -Force shots | Out-Null
+
+          Add-Type -Namespace W -Name U -MemberDefinition @'
+            [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+            [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+'@
+
+          function Capture([string]$path) {
+            $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+            $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+            $g = [System.Drawing.Graphics]::FromImage($bmp)
+            $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+            $g.Dispose()
+            $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
+            $bmp.Dispose()
+            Write-Host "saved $path"
+          }
+
+          $targets = @(
+            @{ name = 'configurator'; exe = 'C:\Program Files\Vigil\vigil-configurator.exe' },
+            @{ name = 'master';       exe = 'C:\Program Files\Vigil\vigil-master.exe' }
+          )
+
+          $failed = @()
+          foreach ($t in $targets) {
+            Write-Host "=== launching $($t.name) ==="
+            $p = Start-Process -FilePath $t.exe -PassThru
+            $handle = [IntPtr]::Zero
+            for ($i = 0; $i -lt 30; $i++) {
+              Start-Sleep -Milliseconds 500
+              $p.Refresh()
+              if ($p.HasExited) { break }
+              if ($p.MainWindowHandle -ne [IntPtr]::Zero) { $handle = $p.MainWindowHandle; break }
+            }
+            Start-Sleep -Seconds 3
+            $p.Refresh()
+            if ($p.HasExited) {
+              Write-Host "$($t.name) EXITED with code $($p.ExitCode)" -ForegroundColor Red
+              $failed += "$($t.name) exited ($($p.ExitCode))"
+              continue
+            }
+            Write-Host "$($t.name) alive, pid=$($p.Id), hwnd=$handle, title='$($p.MainWindowTitle)'"
+            if ($handle -ne [IntPtr]::Zero) {
+              [W.U]::ShowWindow($handle, 3) | Out-Null
+              [W.U]::SetForegroundWindow($handle) | Out-Null
+              Start-Sleep -Seconds 2
+            }
+            Capture (Join-Path $PWD "shots\$($t.name).png")
+            if ($handle -eq [IntPtr]::Zero) { $failed += "$($t.name) no main window" }
+            try { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue } catch {}
+            Start-Sleep -Seconds 2
+          }
+
+          Get-ChildItem shots | Select-Object Name, Length | Format-Table -AutoSize
+          if ($failed.Count -gt 0) { throw "GUI smoke failures: $($failed -join '; ')" }
+
+      - name: Capture installer UI screenshot
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.Windows.Forms
+          Add-Type -AssemblyName System.Drawing
+          $exe = Get-ChildItem -Recurse dist -Filter '*student*.exe' | Select-Object -First 1
+          if (-not $exe) { Write-Host 'no student installer, skip'; exit 0 }
+          $p = Start-Process -FilePath $exe.FullName -PassThru
+          Start-Sleep -Seconds 6
+          $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+          $g = [System.Drawing.Graphics]::FromImage($bmp)
+          $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+          $g.Dispose()
+          $bmp.Save((Join-Path $PWD 'shots\installer.png'), [System.Drawing.Imaging.ImageFormat]::Png)
+          $bmp.Dispose()
+          Write-Host "installer window title: '$($p.MainWindowTitle)'"
+          Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-screenshots
+          path: shots/
+          if-no-files-found: warn
