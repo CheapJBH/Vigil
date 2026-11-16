@@ -87,14 +87,14 @@ function Assert-Admin {
     if (-not (New-Object Security.Principal.WindowsPrincipal($id)).IsInRole(
             [Security.Principal.WindowsBuiltInRole]::Administrator)) {
         Write-Host '需要管理员权限，正在提升...' -ForegroundColor Yellow
-        $args = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"")
+        $argList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"")
         switch ($script:ParamSet) {
-            'Install'     { $args += @('-Install', '-Password', "`"$Password`"") }
-            'Release'     { $args += @('-Release', '-Password', "`"$Password`"") }
-            'SetPassword' { $args += @('-SetPassword', '-Password', "`"$Password`"") }
-            'Harden'      { $args += '-Harden' }
+            'Install'     { $argList += @('-Install', '-Password', "`"$Password`"") }
+            'Release'     { $argList += @('-Release', '-Password', "`"$Password`"") }
+            'SetPassword' { $argList += @('-SetPassword', '-Password', "`"$Password`"") }
+            'Harden'      { $argList += '-Harden' }
         }
-        Start-Process -FilePath (Get-Process -Id $PID).Path -Verb RunAs -ArgumentList $args
+        Start-Process -FilePath (Get-Process -Id $PID).Path -Verb RunAs -ArgumentList $argList
         exit
     }
 }
