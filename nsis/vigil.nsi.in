@@ -99,7 +99,8 @@ RequestExecutionLevel admin
 
 !insertmacro MUI_UNPAGE_FINISH
 
-!insertmacro MUI_LANGUAGE "English" ;first language is the default language
+!insertmacro MUI_LANGUAGE "SimpChinese" ; 默认界面语言：简体中文
+!insertmacro MUI_LANGUAGE "English" ; first non-default language
 !insertmacro MUI_LANGUAGE "Afrikaans"
 !insertmacro MUI_LANGUAGE "Albanian"
 !insertmacro MUI_LANGUAGE "Arabic"
@@ -145,7 +146,6 @@ RequestExecutionLevel admin
 !insertmacro MUI_LANGUAGE "Russian"
 !insertmacro MUI_LANGUAGE "Serbian"
 !insertmacro MUI_LANGUAGE "SerbianLatin"
-!insertmacro MUI_LANGUAGE "SimpChinese"
 !insertmacro MUI_LANGUAGE "Slovak"
 !insertmacro MUI_LANGUAGE "Slovenian"
 !insertmacro MUI_LANGUAGE "Spanish"
