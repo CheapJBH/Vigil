@@ -99,6 +99,24 @@ done
 mkdir -p "$STAGING/translations"
 cp translations/*.qm "$STAGING/translations/" 2>/dev/null || true
 
+# 仓库里的 .ts 直接用 lrelease 编译，不依赖 lupdate（CI 上 lupdate 会因缺 DLL 崩溃）
+LREL=$(command -v lrelease6 2>/dev/null || command -v lrelease 2>/dev/null || true)
+if [ -n "$LREL" ]; then
+	ok=0
+	for ts in "$SRCDIR"/translations/*.ts; do
+		[ -e "$ts" ] || continue
+		base=$(basename "$ts" .ts)
+		if "$LREL" "$ts" -qm "$STAGING/translations/$base.qm" >/dev/null 2>&1; then
+			ok=$((ok + 1))
+		else
+			echo "!! lrelease failed: $ts"
+		fi
+	done
+	echo "== translations compiled: $ok"
+else
+	echo "!! lrelease not found, skipping program translations"
+fi
+
 copy_if_present() {
 	for src in "$@"; do
 		[ -e "$src" ] && cp "$src" "$STAGING/" 2>/dev/null
