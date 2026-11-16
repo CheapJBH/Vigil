@@ -81,7 +81,7 @@ jobs:
           STAGING=$(ls -d build/vigil-win* | head -1)
           test -f "$STAGING/platforms/qwindows.dll"
           test -f "$STAGING/vigil.nsi"
-          test -f "$STAGING/nsis/welcome-page.bmp"
+          test -f "$STAGING/welcome-page.bmp"
           if [ ! -f "$STAGING/crypto/libqca-ossl.dll" ]; then
             echo "::warning::qca-ossl crypto plugin is missing from staging"
           fi
@@ -123,9 +123,12 @@ jobs:
           $dst = Join-Path $dir.FullName 'nsis'
           New-Item -ItemType Directory -Force $dst | Out-Null
           Copy-Item nsis\* -Destination $dst -Recurse -Force
-          Get-ChildItem $dst | Format-Table Name, Length
+          # 资源与 vigil.nsi 平铺，避开 makensis 的相对路径解析问题
+          Copy-Item nsis\*.bmp,nsis\*.ico -Destination $dir.FullName -Force
+          Get-ChildItem $dir.FullName -File | Where-Object { $_.Extension -in '.bmp','.ico' } |
+            Format-Table Name, Length
           foreach ($f in @('welcome-page.bmp','header.bmp','installer.ico','uninstaller.ico')) {
-            if (-not (Test-Path (Join-Path $dst $f))) { throw "NSIS asset missing: $f" }
+            if (-not (Test-Path (Join-Path $dir.FullName $f))) { throw "NSIS asset missing: $f" }
           }
           Write-Host "staging root: $($dir.FullName)"
 
