@@ -279,6 +279,32 @@ ${EndIf}
 SectionEnd
 !endif
 
+!ifdef EDITION_TEACHER
+Section "课堂策略 Classroom policy" SEC_POLICY
+${INSTALL_TYPE}
+SetOutPath "$INSTDIR\netguard"
+File "netguard\VigilPolicyCenter.ps1"
+File "netguard\VigilNetGuard.ps1"
+File "netguard\VigilNetGuardDaemon.ps1"
+File "netguard\VigilGuard.ps1"
+File "netguard\VigilPolicyAgent.ps1"
+File "netguard\netguard-policy.example.json"
+File "netguard\README.md"
+
+${GetParameters} $R0
+${GetOptions} $R0 "/NoStartMenuFolder" $R1
+${If} ${Errors}
+CreateDirectory "$SMPROGRAMS\Vigil"
+CreateShortCut "$SMPROGRAMS\Vigil\Vigil Classroom Policy.lnk" "$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" \
+	'-NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\netguard\VigilPolicyCenter.ps1"' \
+	"$INSTDIR\vigil-master.exe" 0
+CreateShortCut "$SMPROGRAMS\Vigil\Vigil Network Guard.lnk" "$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" \
+	'-NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\netguard\VigilNetGuard.ps1" -Status' \
+	"$INSTDIR\vigil-master.exe" 0
+${EndIf}
+SectionEnd
+!endif
+
 !ifdef EDITION_STUDENT
 Section "课堂口令 Classroom code" SEC_CLASSROOM
 ${INSTALL_TYPE}
@@ -291,6 +317,31 @@ ${If} ${Errors}
 CreateDirectory "$SMPROGRAMS\Vigil"
 CreateShortCut "$SMPROGRAMS\Vigil\Vigil Classroom Join.lnk" "$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" \
 	'-NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\classroom\VigilStudentSetup.ps1"' \
+	"$INSTDIR\vigil-server.exe" 0
+${EndIf}
+SectionEnd
+!endif
+
+!ifdef EDITION_STUDENT
+Section "课堂策略 Classroom policy" SEC_POLICY
+${INSTALL_TYPE}
+SetOutPath "$INSTDIR\netguard"
+File "netguard\VigilNetGuard.ps1"
+File "netguard\VigilNetGuardDaemon.ps1"
+File "netguard\VigilGuard.ps1"
+File "netguard\VigilPolicyAgent.ps1"
+File "netguard\netguard-policy.example.json"
+File "netguard\README.md"
+
+${GetParameters} $R0
+${GetOptions} $R0 "/NoStartMenuFolder" $R1
+${If} ${Errors}
+CreateDirectory "$SMPROGRAMS\Vigil"
+CreateShortCut "$SMPROGRAMS\Vigil\Vigil Network Guard.lnk" "$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" \
+	'-NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\netguard\VigilNetGuard.ps1" -Status' \
+	"$INSTDIR\vigil-server.exe" 0
+CreateShortCut "$SMPROGRAMS\Vigil\Vigil Classroom Sync.lnk" "$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" \
+	'-NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\netguard\VigilPolicyAgent.ps1" -Once' \
 	"$INSTDIR\vigil-server.exe" 0
 ${EndIf}
 SectionEnd
@@ -385,12 +436,16 @@ RmDir /r "$INSTDIR\styles"
 RmDir /r "$INSTDIR\tls"
 RmDir /r "$INSTDIR\translations"
 RmDir /r "$INSTDIR\interception"
+RmDir /r "$INSTDIR\netguard"
 RmDir /r "$INSTDIR\classroom"
 
 RmDir "$INSTDIR"
 
 Delete "$SMPROGRAMS\Vigil\Vigil Master.lnk"
 Delete "$SMPROGRAMS\Vigil\Vigil Configurator.lnk"
+Delete "$SMPROGRAMS\Vigil\Vigil Classroom Policy.lnk"
+Delete "$SMPROGRAMS\Vigil\Vigil Network Guard.lnk"
+Delete "$SMPROGRAMS\Vigil\Vigil Classroom Sync.lnk"
 Delete "$SMPROGRAMS\Vigil\Vigil Classroom Code.lnk"
 Delete "$SMPROGRAMS\Vigil\Vigil Classroom Join.lnk"
 Delete "$SMPROGRAMS\Vigil\Uninstall Vigil.lnk"
