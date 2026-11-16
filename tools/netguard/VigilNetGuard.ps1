@@ -192,7 +192,7 @@ function Apply-Policy {
 
     # 1) 回环
     if ($p.allowLoopback) {
-        New-NetGuardRule -Name 'loopback' -DryRun:$DryRun -Args @{
+        New-NetGuardRule -Name 'loopback' -DryRun:$DryRun -RuleArgs @{
             RemoteAddress = '127.0.0.0/8'
         }
         $created++
@@ -200,12 +200,12 @@ function Apply-Policy {
 
     # 2) 局域网 / 指定网段（Vigil 自身通信必须保留）
     if ($p.allowLocalSubnet) {
-        New-NetGuardRule -Name 'local-subnet' -DryRun:$DryRun -Args @{ RemoteAddress = 'LocalSubnet' }
+        New-NetGuardRule -Name 'local-subnet' -DryRun:$DryRun -RuleArgs @{ RemoteAddress = 'LocalSubnet' }
         $created++
     }
     $lanList = @($p.lanCidrs | Where-Object { $_ })
     if ($lanList.Count -gt 0) {
-        New-NetGuardRule -Name 'lan-cidrs' -DryRun:$DryRun -Args @{ RemoteAddress = $lanList }
+        New-NetGuardRule -Name 'lan-cidrs' -DryRun:$DryRun -RuleArgs @{ RemoteAddress = $lanList }
         $created++
     }
 
@@ -219,12 +219,12 @@ function Apply-Policy {
                    Select-Object -Unique
         } catch { Write-Warning "读取 DNS 服务器失败: $($_.Exception.Message)" }
         if ($dns -and $dns.Count -gt 0) {
-            New-NetGuardRule -Name 'dns-servers' -DryRun:$DryRun -Args @{
+            New-NetGuardRule -Name 'dns-servers' -DryRun:$DryRun -RuleArgs @{
                 RemoteAddress = @($dns)
                 Protocol      = 'UDP'
                 RemotePort    = 53
             }
-            New-NetGuardRule -Name 'dns-servers-tcp' -DryRun:$DryRun -Args @{
+            New-NetGuardRule -Name 'dns-servers-tcp' -DryRun:$DryRun -RuleArgs @{
                 RemoteAddress = @($dns)
                 Protocol      = 'TCP'
                 RemotePort    = 53
@@ -236,7 +236,7 @@ function Apply-Policy {
     # 4) 域名解析后的 IP
     $domainIps = @(Resolve-AddressList -Names @($p.domains))
     if ($domainIps.Count -gt 0) {
-        New-NetGuardRule -Name "domains-$($domainIps.Count)ips" -DryRun:$DryRun -Args @{
+        New-NetGuardRule -Name "domains-$($domainIps.Count)ips" -DryRun:$DryRun -RuleArgs @{
             RemoteAddress = $domainIps
         }
         $created++
@@ -246,7 +246,7 @@ function Apply-Policy {
     # 5) 显式 IP / 网段
     $ipList = @($p.ips | Where-Object { $_ })
     if ($ipList.Count -gt 0) {
-        New-NetGuardRule -Name 'ip-list' -DryRun:$DryRun -Args @{ RemoteAddress = $ipList }
+        New-NetGuardRule -Name 'ip-list' -DryRun:$DryRun -RuleArgs @{ RemoteAddress = $ipList }
         $created++
     }
 
@@ -257,7 +257,7 @@ function Apply-Policy {
         if ($targets.Count -eq 0) { continue }
         $proto = 'TCP'
         if ($entry.PSObject.Properties['protocol'] -and $entry.protocol) { $proto = "$($entry.protocol)".ToUpper() }
-        New-NetGuardRule -Name "port-$($entry.port)-$($entry.ip)" -DryRun:$DryRun -Args @{
+        New-NetGuardRule -Name "port-$($entry.port)-$($entry.ip)" -DryRun:$DryRun -RuleArgs @{
             RemoteAddress = $targets
             Protocol      = $proto
             RemotePort    = [int]$entry.port
@@ -272,7 +272,7 @@ function Apply-Policy {
             Write-Warning "程序不存在，跳过: $prog"
             continue
         }
-        New-NetGuardRule -Name "prog-$([IO.Path]::GetFileName($prog))" -DryRun:$DryRun -Args @{
+        New-NetGuardRule -Name "prog-$([IO.Path]::GetFileName($prog))" -DryRun:$DryRun -RuleArgs @{
             Program = $prog
         }
         $created++
