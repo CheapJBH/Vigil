@@ -273,6 +273,11 @@ mkdir -p "$STAGING/nsis"
 cp -rf "$SRCDIR/nsis/." "$STAGING/nsis/" 2>/dev/null || true
 # makensis 在 CI 上无法正确解析相对子目录，资源必须与 vigil.nsi 同目录
 cp -f "$SRCDIR/nsis"/*.bmp "$SRCDIR/nsis"/*.ico "$STAGING/" 2>/dev/null || true
+# 网络白名单 / 防杀 / 课堂策略（教师端与学生端共用同一目录，安装包按端挑选）
+mkdir -p "$STAGING/netguard"
+cp -f "$SRCDIR"/tools/netguard/*.ps1 "$STAGING/netguard/" 2>/dev/null || true
+cp -f "$SRCDIR"/tools/netguard/*.json "$STAGING/netguard/" 2>/dev/null || true
+cp -f "$SRCDIR"/tools/netguard/README.md "$STAGING/netguard/" 2>/dev/null || true
 mkdir -p "$STAGING/classroom-teacher" "$STAGING/classroom-student"
 cp -rf "$SRCDIR/tools/classroom-setup/teacher/." "$STAGING/classroom-teacher/" 2>/dev/null || true
 cp -rf "$SRCDIR/tools/classroom-setup/student/." "$STAGING/classroom-student/" 2>/dev/null || true
