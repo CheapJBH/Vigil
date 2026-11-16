@@ -43,6 +43,7 @@ jobs:
             mingw-w64-x86_64-qt6-websockets
             mingw-w64-x86_64-qt6-5compat
             mingw-w64-x86_64-qt6-translations
+            mingw-w64-x86_64-qt6-imageformats
             mingw-w64-x86_64-qca-qt6
             mingw-w64-x86_64-libvncserver
             mingw-w64-x86_64-openldap
@@ -72,17 +73,16 @@ jobs:
           cd build
           ninja windows-binaries
 
-      - name: Ensure NSIS assets and classroom tools are staged
+      - name: Verify staged runtime is complete
         run: |
           set -e
           STAGING=$(ls -d build/vigil-win* | head -1)
-          mkdir -p "$STAGING/nsis"
-          cp -a nsis/. "$STAGING/nsis/"
-          mkdir -p "$STAGING/classroom-teacher" "$STAGING/classroom-student"
-          cp -a tools/classroom-setup/teacher/. "$STAGING/classroom-teacher/" 2>/dev/null || true
-          cp -a tools/classroom-setup/student/. "$STAGING/classroom-student/" 2>/dev/null || true
-          ls "$STAGING" | head -40
+          test -f "$STAGING/platforms/qwindows.dll"
+          test -f "$STAGING/vigil.nsi"
+          test -f "$STAGING/nsis/welcome-page.bmp"
+          test -f "$STAGING/crypto/libqca-ossl.dll"
           ls "$STAGING/nsis"
+          ls "$STAGING/platforms" "$STAGING/tls" "$STAGING/crypto"
 
       - name: Upload staging
         uses: actions/upload-artifact@v4
@@ -95,6 +95,11 @@ jobs:
     needs: build
     runs-on: windows-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
       - name: Download staging
         uses: actions/download-artifact@v4
         with:
@@ -105,10 +110,25 @@ jobs:
         run: choco install nsis --no-progress -y
         shell: cmd
 
+      - name: Refresh NSIS assets from repo
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dir = Get-ChildItem staging -Directory | Select-Object -First 1
+          if (-not $dir) { throw "staging directory missing" }
+          $dst = Join-Path $dir.FullName 'nsis'
+          New-Item -ItemType Directory -Force $dst | Out-Null
+          Copy-Item nsis\* -Destination $dst -Recurse -Force
+          Get-ChildItem $dst | Format-Table Name, Length
+          foreach ($f in @('welcome-page.bmp','header.bmp','installer.ico','uninstaller.ico')) {
+            if (-not (Test-Path (Join-Path $dst $f))) { throw "NSIS asset missing: $f" }
+          }
+          Write-Host "staging root: $($dir.FullName)"
+
       - name: List staging
         shell: pwsh
         run: |
-          Get-ChildItem -Recurse staging -Depth 1 | Select-Object -First 40 | Format-Table Name, Length
+          Get-ChildItem -Recurse staging | Select-Object FullName, Length | Format-Table -AutoSize
 
       - name: Package both editions
         shell: pwsh
@@ -119,12 +139,13 @@ jobs:
 
           $dir = Get-ChildItem staging -Directory | Select-Object -First 1
           if (-not $dir) { throw "staging directory missing" }
+          $root = $dir.FullName.Replace('\', '/')
+          Write-Host "packaging in $root"
           Push-Location $dir.FullName
           try {
-            Write-Host "packaging in $(Get-Location)"
-            & $makensis -DEDITION_TEACHER vigil.nsi
+            & $makensis "-DNSIS_DIR=$root" -DEDITION_TEACHER vigil.nsi
             if ($LASTEXITCODE -ne 0) { throw "teacher packaging failed ($LASTEXITCODE)" }
-            & $makensis -DEDITION_STUDENT vigil.nsi
+            & $makensis "-DNSIS_DIR=$root" -DEDITION_STUDENT vigil.nsi
             if ($LASTEXITCODE -ne 0) { throw "student packaging failed ($LASTEXITCODE)" }
           } finally {
             Pop-Location
