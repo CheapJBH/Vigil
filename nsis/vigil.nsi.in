@@ -52,6 +52,13 @@ RequestExecutionLevel admin
 !include "MUI2.nsh"
 !include "FileFunc.nsh"
 
+# makensis 的相对路径解析在 GitHub Actions 上不可靠，
+# 由调用方用 -DNSIS_DIR=<staging 绝对路径> 显式指定。
+!ifndef NSIS_DIR
+  !define NSIS_DIR "."
+!endif
+!cd "${NSIS_DIR}"
+
 !define MUI_ABORTWARNING
 !define MUI_UNABORTWARNING
 
@@ -155,6 +162,36 @@ RequestExecutionLevel admin
 
 ######################################################################
 
+# 两端共用的文件集合：运行库、Qt 插件、翻译、辅助命令行工具。
+# 教师端与学生端的差异只在 service / master / interception 三类组件。
+!macro InstallCommonFiles
+SetOutPath "$INSTDIR"
+File "vigil-configurator.exe"
+File "vigil-cli.exe"
+File "vigil-wcli.exe"
+File "vigil-worker.exe"
+File "*.dll"
+File "LICENSE.TXT"
+File "README.TXT"
+SetOutPath "$INSTDIR\plugins"
+File "plugins/*.dll"
+SetOutPath "$INSTDIR\translations"
+File /nonfatal "translations/*.qm"
+SetOutPath "$INSTDIR\crypto"
+File /nonfatal "crypto/*.dll"
+SetOutPath "$INSTDIR\imageformats"
+File /nonfatal "imageformats/*.dll"
+SetOutPath "$INSTDIR\platforms"
+File "platforms/*.dll"
+SetOutPath "$INSTDIR\styles"
+File /nonfatal "styles/*.dll"
+SetOutPath "$INSTDIR\tls"
+File /nonfatal "tls/*.dll"
+SetOutPath "$INSTDIR"
+!macroend
+
+######################################################################
+
 !ifndef EDITION_TEACHER
 Section "Vigil Service" SEC_SERVICE
 SectionIn RO
@@ -174,33 +211,7 @@ SetOutPath "$INSTDIR"
 # core components
 File "vigil-server.exe"
 File "vigil-service.exe"
-File "vigil-configurator.exe"
-File "vigil-cli.exe"
-File "vigil-wcli.exe"
-File "vigil-worker.exe"
-File "*.dll"
-File "LICENSE.TXT"
-File "README.TXT"
-# plugins
-SetOutPath "$INSTDIR\plugins"
-File "plugins/*.dll"
-# translations
-SetOutPath "$INSTDIR\translations"
-File /nonfatal "translations/*.qm"
-# QCA plugins
-SetOutPath "$INSTDIR\crypto"
-File "crypto/*.dll"
-# Qt image format plugin
-SetOutPath "$INSTDIR\imageformats"
-File "imageformats/qjpeg.dll"
-# Qt platform plugin
-SetOutPath "$INSTDIR\platforms"
-File "platforms/qwindows.dll"
-SetOutPath "$INSTDIR\styles"
-File "styles/*.dll"
-# Qt TLS backend
-SetOutPath "$INSTDIR\tls"
-File "tls/qopensslbackend.dll"
+!insertmacro InstallCommonFiles
 # configuration
 ExecWait '"$INSTDIR\vigil-wcli.exe" service register'
 ExecWait '"$INSTDIR\vigil-wcli.exe" config set Network/FirewallExceptionEnabled 1'
@@ -223,7 +234,9 @@ SectionEnd
 !ifndef EDITION_STUDENT
 Section "Vigil Master" SEC_MASTER
 ${INSTALL_TYPE}
+SetOverwrite on
 SetOutPath "$INSTDIR"
+!insertmacro InstallCommonFiles
 File "vigil-master.exe"
 
 ${GetParameters} $R0
@@ -290,14 +303,18 @@ FunctionEnd
 
 Function .onInit
 ${GetParameters} $R0
+!ifndef EDITION_STUDENT
 ${GetOptions} $R0 "/NoMaster" $R1
 ${IfNot} ${Errors}
   !insertmacro UnselectSection ${SEC_MASTER}
 ${EndIf}
+!endif
+!ifndef EDITION_TEACHER
 ${GetOptions} $R0 "/NoInterception" $R1
 ${IfNot} ${Errors}
   !insertmacro UnselectSection ${SEC_INTERCEPTION}
 ${EndIf}
+!endif
 UserInfo::GetAccountType
 pop $0
 ${If} $0 != "admin"
@@ -398,8 +415,12 @@ LangString DESC_SEC_INTERCEPTION ${LANG_ENGLISH} "Special input device driver re
 LangString DESC_SEC_INTERCEPTION ${LANG_GERMAN} "Spezieller Eingabegerätetreiber, der zum Abfangen von Tastenkombinationen wie Strg+Alt+Entf im Bildschirmsperr-Modus benötigt wird"
 
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
+!ifndef EDITION_TEACHER
 !insertmacro MUI_DESCRIPTION_TEXT ${SEC_SERVICE} $(DESC_SEC_SERVICE)
-!insertmacro MUI_DESCRIPTION_TEXT ${SEC_MASTER} $(DESC_SEC_MASTER)
 !insertmacro MUI_DESCRIPTION_TEXT ${SEC_INTERCEPTION} $(DESC_SEC_INTERCEPTION)
+!endif
+!ifndef EDITION_STUDENT
+!insertmacro MUI_DESCRIPTION_TEXT ${SEC_MASTER} $(DESC_SEC_MASTER)
+!endif
 !insertmacro MUI_FUNCTION_DESCRIPTION_END
 
