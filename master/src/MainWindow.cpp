@@ -477,11 +477,22 @@ void MainWindow::showAboutDialog()
 
 void MainWindow::addFeaturesToToolBar()
 {
+	// 把"模式类"功能（监控 / 控制 / 屏幕锁定 …）与"一次性动作类"功能分开，
+	// 否则整排按钮是平的，新用户很难区分"切模式"和"执行一次"。
+	bool haveAnyFeature = false;
+	bool lastWasMode = false;
+
 	for( const auto& feature : m_master.features() )
 	{
 		if( feature.testFlag( Feature::Flag::Meta ) )
 		{
 			continue;
+		}
+
+		const bool isMode = feature.testFlag( Feature::Flag::Mode );
+		if( haveAnyFeature && isMode != lastWasMode )
+		{
+			ui->toolBar->addSeparator();
 		}
 
 		auto btn = new ToolButton( QIcon( feature.iconUrl() ),
@@ -500,11 +511,14 @@ void MainWindow::addFeaturesToToolBar()
 		btn->setObjectName( feature.name() );
 		btn->addTo( ui->toolBar );
 
-		if( feature.testFlag( Feature::Flag::Mode ) )
+		if( isMode )
 		{
 			btn->setCheckable( true );
 			m_modeGroup->addButton( btn, buttonId( feature ) );
 		}
+
+		haveAnyFeature = true;
+		lastWasMode = isMode;
 	}
 }
 
