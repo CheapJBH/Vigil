@@ -23,12 +23,17 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          foreach ($f in @('tools/netguard/VigilNetGuard.ps1','tools/netguard/VigilNetGuardDaemon.ps1')) {
+          foreach ($f in @(
+              'tools/netguard/VigilNetGuard.ps1',
+              'tools/netguard/VigilNetGuardDaemon.ps1',
+              'tools/netguard/VigilGuard.ps1',
+              'tools/netguard/VigilPolicyAgent.ps1',
+              'tools/netguard/VigilPolicyCenter.ps1')) {
             $err = $null
             [System.Management.Automation.Language.Parser]::ParseFile(
               (Resolve-Path $f), [ref]$null, [ref]$err) | Out-Null
             if ($err.Count -gt 0) {
-              $err | ForEach-Object { Write-Host "ERROR $f:$($_.Extent.StartLineNumber) $($_.Message)" }
+              $err | ForEach-Object { Write-Host "ERROR ${f}:$($_.Extent.StartLineNumber) $($_.Message)" }
               throw "syntax errors in $f"
             }
             Write-Host "OK  $f"
