@@ -11,26 +11,11 @@ if(NOT DEFINED MINGW_TOOL_PREFIX)
 	set(MINGW_TOOL_PREFIX "")
 endif()
 
-# Qt 插件目录：MSYS2 在 share/qt6/plugins，Arch 交叉环境在 <prefix>/plugins
-if(EXISTS "${MINGW_PREFIX}/share/qt6/plugins")
-	set(QT_PLUGIN_DIR "${MINGW_PREFIX}/share/qt6/plugins")
-else()
-	set(QT_PLUGIN_DIR "${MINGW_PREFIX}/plugins")
-endif()
-
-set(DLLDIR "${MINGW_PREFIX}/bin")
-set(DLLDIR_LIB "${MINGW_PREFIX}/lib")
-string(REGEX MATCH "^[^.]+" GCC_VERSION_MAJOR ${CMAKE_CXX_COMPILER_VERSION})
-
-# GCC 运行时目录：MSYS2 无 -posix 后缀，因此直接探测
-set(DLLDIR_GCC "/usr/lib/gcc/${MINGW_TARGET}/${GCC_VERSION_MAJOR}-posix")
-if(NOT EXISTS "${DLLDIR_GCC}")
-	file(GLOB _gcc_runtime_dirs "${MINGW_PREFIX}/lib/gcc/${MINGW_TARGET}/*")
-	list(SORT _gcc_runtime_dirs)
-	if(_gcc_runtime_dirs)
-		list(GET _gcc_runtime_dirs 0 DLLDIR_GCC)
-	endif()
-endif()
+# Qt 插件目录与 GCC 运行时目录必须由 bash 侧探测：
+# CMake 在 Windows 上把 "/mingw64/..." 当成当前盘根目录（C:/mingw64），
+# 导致 EXISTS()/file(GLOB) 全部判假，切勿在此处做路径存在性判断。
+set(QT_PLUGIN_DIR "")
+set(DLLDIR_GCC "")
 
 if(VIGIL_BUILD_WIN64)
 	set(DLL_GCC "libgcc_s_seh-1.dll")
