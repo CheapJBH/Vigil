@@ -216,6 +216,15 @@ void VigilTitleBar::addMenu( QMenu* menu )
 }
 
 
+void VigilTitleBar::setMaximizeButtonVisible( bool visible )
+{
+	if( m_maxButton != nullptr )
+	{
+		m_maxButton->setVisible( visible );
+	}
+}
+
+
 void VigilTitleBar::paintEvent( QPaintEvent* event )
 {
 	Q_UNUSED( event )
@@ -340,6 +349,12 @@ bool VigilTitleBar::eventFilter( QObject* watched, QEvent* event )
 void VigilTitleBar::toggleMaximize()
 {
 	if( m_window == nullptr )
+	{
+		return;
+	}
+
+	// 对话框（登录框等）不允许最大化。
+	if( m_maxButton == nullptr || m_maxButton->isVisible() == false )
 	{
 		return;
 	}
