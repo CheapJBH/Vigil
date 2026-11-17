@@ -113,22 +113,41 @@ jobs:
           Add-Type -AssemblyName System.Drawing
           New-Item -ItemType Directory -Force shots | Out-Null
 
-          Add-Type -Namespace W -Name U -MemberDefinition '[DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd); [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);'
+          Add-Type -Namespace W -Name U -MemberDefinition '[DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd); [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow); [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect); [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left; public int Top; public int Right; public int Bottom; }'
 
-          function Capture([string]$path) {
-            $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-            $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+          function CaptureWindow([IntPtr]$handle, [string]$path) {
+            if ($handle -eq [IntPtr]::Zero) {
+              $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+              $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+              $g = [System.Drawing.Graphics]::FromImage($bmp)
+              $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+              $g.Dispose()
+              $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
+              $bmp.Dispose()
+              Write-Host "saved (full screen fallback) $path"
+              return
+            }
+
+            $r = New-Object 'W.U+RECT'
+            [W.U]::GetWindowRect($handle, [ref]$r) | Out-Null
+            $x = $r.Left + 1
+            $y = $r.Top + 1
+            $w = $r.Right - $r.Left - 2
+            $h = $r.Bottom - $r.Top - 2
+            if ($w -le 0 -or $h -le 0) { throw 'bad window rect' }
+
+            $bmp = New-Object System.Drawing.Bitmap $w, $h
             $g = [System.Drawing.Graphics]::FromImage($bmp)
-            $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+            $g.CopyFromScreen($x, $y, 0, 0, (New-Object System.Drawing.Size($w, $h)))
             $g.Dispose()
             $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
             $bmp.Dispose()
-            Write-Host "saved $path"
+            Write-Host "saved window ${w}x${h} -> $path"
           }
 
           function Show-AppWindow([System.Diagnostics.Process]$p) {
             $handle = [IntPtr]::Zero
-            for ($i = 0; $i -lt 30; $i++) {
+            for ($i = 0; $i -lt 40; $i++) {
               Start-Sleep -Milliseconds 500
               $p.Refresh()
               if ($p.HasExited) { break }
@@ -137,7 +156,6 @@ jobs:
             Start-Sleep -Seconds 6
             $p.Refresh()
             if ($handle -ne [IntPtr]::Zero) {
-              [W.U]::ShowWindow($handle, 3) | Out-Null
               [W.U]::SetForegroundWindow($handle) | Out-Null
               Start-Sleep -Seconds 2
             }
@@ -148,28 +166,23 @@ jobs:
           $cli = 'C:\Program Files\Vigil\vigil-cli.exe'
 
           # 1) 登录框截图（默认 Logon 认证）
-          Write-Host "=== master: login dialog ==="
+          Write-Host '=== master: login dialog ==='
           $p = Start-Process -FilePath $masterExe -PassThru
           $h = Show-AppWindow $p
-          Start-Sleep -Seconds 2
-          Capture (Join-Path $PWD 'shots\master-login.png')
+          Start-Sleep -Seconds 1
+          CaptureWindow $h (Join-Path $PWD 'shots\master-login.png')
           try { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue } catch {}
-          Start-Sleep -Seconds 2
+          Start-Sleep -Seconds 3
 
           # 2) 切到 KeyFile 认证：master 启动后不用输密码，主窗口能直接显示
-          Write-Host "=== switch authentication to KeyFile ==="
+          Write-Host '=== switch authentication to KeyFile ==='
           & $cli authkeys create ci-smoke 2>&1 | Out-Host
           & $cli config set Authentication/Method KeyFileAuthentication 2>&1 | Out-Host
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "config set exited with $LASTEXITCODE"
-          }
+          if ($LASTEXITCODE -ne 0) { Write-Host "config set exited with $LASTEXITCODE" }
           $global:LASTEXITCODE = 0
           $configPath = 'C:\ProgramData\Vigil\Config.json'
           if (Test-Path $configPath) {
-            Write-Host '--- Authentication section ---'
-            Select-String -Path $configPath -Pattern 'Authentication|Method' -Context 0,2 | Out-Host
-          } else {
-            Write-Host "Config.json not found at $configPath"
+            Select-String -Path $configPath -Pattern 'Method' -Context 0,1 | Out-Host
           }
 
           $targets = @(
@@ -189,10 +202,10 @@ jobs:
               continue
             }
             Write-Host "$($t.name) alive, pid=$($p.Id), hwnd=$handle, title='$($p.MainWindowTitle)'"
-            Capture (Join-Path $PWD "shots\$($t.name).png")
+            CaptureWindow $handle (Join-Path $PWD "shots\$($t.name).png")
             if ($handle -eq [IntPtr]::Zero) { $failed += "$($t.name) no main window" }
             try { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue } catch {}
-            Start-Sleep -Seconds 2
+            Start-Sleep -Seconds 3
           }
 
           Get-ChildItem shots | Select-Object Name, Length | Format-Table -AutoSize
@@ -203,31 +216,36 @@ jobs:
         run: |
           Add-Type -AssemblyName System.Windows.Forms
           Add-Type -AssemblyName System.Drawing
-          Add-Type -Namespace W -Name UI -MemberDefinition '[DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd); [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);'
+          Add-Type -Namespace W -Name U -MemberDefinition '[DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd); [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow); [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect); [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left; public int Top; public int Right; public int Bottom; }'
 
           $exe = Get-ChildItem -Recurse dist -Filter '*student*.exe' | Select-Object -First 1
           if (-not $exe) { Write-Host 'no student installer, skip'; exit 0 }
 
-          function Capture([string]$path) {
-            $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-            $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+          function CaptureWindow([IntPtr]$handle, [string]$path) {
+            $r = New-Object 'W.U+RECT'
+            [W.U]::GetWindowRect($handle, [ref]$r) | Out-Null
+            $x = $r.Left + 1
+            $y = $r.Top + 1
+            $w = $r.Right - $r.Left - 2
+            $h = $r.Bottom - $r.Top - 2
+            if ($w -le 0 -or $h -le 0) { throw 'bad window rect' }
+            $bmp = New-Object System.Drawing.Bitmap $w, $h
             $g = [System.Drawing.Graphics]::FromImage($bmp)
-            $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+            $g.CopyFromScreen($x, $y, 0, 0, (New-Object System.Drawing.Size($w, $h)))
             $g.Dispose()
             $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
             $bmp.Dispose()
-            Write-Host "saved $path"
+            Write-Host "saved window ${w}x${h} -> $path"
           }
 
-          # 把当前 PowerShell 窗口最小化，否则会挡住安装向导
+          # 当前 PowerShell 窗口最小化，避免遮挡
           $console = (Get-Process -Id $PID).MainWindowHandle
-          if ($console -ne [IntPtr]::Zero) { [W.UI]::ShowWindow($console, 6) | Out-Null }
+          if ($console -ne [IntPtr]::Zero) { [W.U]::ShowWindow($console, 6) | Out-Null }
           Start-Sleep -Seconds 1
 
           $p = Start-Process -FilePath $exe.FullName -PassThru
 
-          # NSIS 先解包再启动真正的安装向导（可能是新进程），
-          # 所以要按窗口标题轮询，而不是只看 Start-Process 的 pid。
+          # NSIS 会先解包再启动真正的向导（可能是新进程），按标题轮询
           $win = $null
           $deadline = (Get-Date).AddSeconds(120)
           while ((Get-Date) -lt $deadline) {
@@ -240,13 +258,11 @@ jobs:
 
           if ($win) {
             Write-Host "installer window: '$($win.MainWindowTitle)' pid=$($win.Id)"
-            [W.UI]::ShowWindow($win.MainWindowHandle, 3) | Out-Null
-            [W.UI]::SetForegroundWindow($win.MainWindowHandle) | Out-Null
-            Start-Sleep -Seconds 3
-            Capture (Join-Path $PWD 'shots\installer.png')
+            [W.U]::SetForegroundWindow($win.MainWindowHandle) | Out-Null
+            Start-Sleep -Seconds 2
+            CaptureWindow $win.MainWindowHandle (Join-Path $PWD 'shots\installer.png')
           } else {
             Write-Host 'installer window did not appear in time'
-            Capture (Join-Path $PWD 'shots\installer.png')
           }
 
           Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
