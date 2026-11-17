@@ -156,6 +156,17 @@ PC-02,192.168.1.12
 
 ## 界面
 
+### 界面预览
+
+| 教师端主界面 | 登录框 |
+|:---:|:---:|
+| ![教师端主界面](docs/screenshots/teacher-main.png) | ![登录框](docs/screenshots/teacher-login.png) |
+
+| 配置器 | 安装向导 |
+|:---:|:---:|
+| ![配置器](docs/screenshots/configurator.png) | ![安装向导](docs/screenshots/installer.png) |
+
+
 - Qt Widgets 实现，不背 QML 运行时的包袱
 - 缩略图网格由自定义 item delegate 绘制：圆角边框、状态描边、功能角标
 - 五个侧边面板：**选择**、**截图**、**幻灯片**、**聚光灯**、**关于**
@@ -337,6 +348,17 @@ PC-02,192.168.1.12
 ```
 
 ## UI notes
+
+### Screenshots
+
+| Teacher console | Logon dialog |
+|:---:|:---:|
+| ![Teacher console](docs/screenshots/teacher-main.png) | ![Logon dialog](docs/screenshots/teacher-login.png) |
+
+| Configurator | Installer |
+|:---:|:---:|
+| ![Configurator](docs/screenshots/configurator.png) | ![Installer](docs/screenshots/installer.png) |
+
 
 - Qt Widgets, no QML runtime overhead
 - Thumbnail grid redrawn by a custom item delegate (rounded frame, status ring, feature badges)
