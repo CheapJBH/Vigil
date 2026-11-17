@@ -56,7 +56,7 @@ endif()
 
 if(VIGIL_BUILD_WINDOWS)
 	# add Windows Socket library required by libvncclient
-	target_link_libraries(vigil-core PRIVATE -lws2_32)
+	target_link_libraries(vigil-core PRIVATE -lws2_32 -ldwmapi)
 	set_target_properties(vigil-core PROPERTIES PREFIX "")
 	add_windows_resources(vigil-core
 		NAME VigilCore
