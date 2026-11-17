@@ -28,6 +28,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QDir>
+#include <QFile>
 #include <QFont>
 #include <QGroupBox>
 #include <QGuiApplication>
@@ -628,12 +629,20 @@ void VigilCore::initUi()
 		}
 
 		app->setStyleSheet(QStringLiteral(
-							   "QToolButton:checked {background-color:#88ddff;}"
-							   "QToolTip {padding:5px; border:0px;}"
+							   "QToolButton:checked {background-color:#e3ebfa;}"
 							   ));
 
+		// 统一视觉：浅色背景 + 白色卡片 + 8px 圆角 + 单一强调色。
+		// 样式表放在资源里，方便后续单独调整而不必重新编译逻辑代码。
+		QFile styleFile(QStringLiteral(":/core/vigil.qss"));
+		if (styleFile.open(QFile::ReadOnly | QFile::Text))
+		{
+			app->setStyleSheet(app->styleSheet() +
+							   QString::fromUtf8(styleFile.readAll()));
+		}
+
 		auto toolTipPalette = QToolTip::palette();
-		static const char* toolTipBackgroundColor = "#198cb3";
+		static const char* toolTipBackgroundColor = "#1f2329";
 		toolTipPalette.setColor(QPalette::Window, toolTipBackgroundColor);
 		toolTipPalette.setColor(QPalette::ToolTipBase, toolTipBackgroundColor);
 		toolTipPalette.setColor(QPalette::ToolTipText, Qt::white);
