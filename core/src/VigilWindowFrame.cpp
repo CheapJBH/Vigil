@@ -20,6 +20,7 @@
 
 #ifdef Q_OS_WIN
 #include <windows.h>
+#include <windowsx.h>
 #include <dwmapi.h>
 
 // 这些常量在较老的 MinGW 头文件里可能缺失，按微软文档手工补齐。
