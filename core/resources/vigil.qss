@@ -86,6 +86,24 @@ QComboBox QAbstractItemView
 	selection-color: #2f6fed;
 }
 
+/* 数字框的上下箭头在 Fusion 风格下会画成残留边框，
+   这里干脆去掉，改用滚轮 / 键盘调整。 */
+QSpinBox::up-button,
+QSpinBox::down-button,
+QDoubleSpinBox::up-button,
+QDoubleSpinBox::down-button
+{
+	width: 0;
+	border: none;
+	background: transparent;
+}
+
+QSpinBox,
+QDoubleSpinBox
+{
+	padding-right: 10px;
+}
+
 /* ---------------------------------------------------------------- 按钮 */
 
 QPushButton
@@ -211,19 +229,20 @@ QGroupBox
 	background: #ffffff;
 	border: 1px solid #e9edf3;
 	border-radius: 10px;
-	margin-top: 20px;
-	padding: 14px 14px 12px 14px;
+	margin-top: 10px;
+	padding: 34px 14px 12px 14px;
 }
 
 QGroupBox::title
 {
-	subcontrol-origin: margin;
+	subcontrol-origin: padding;
 	subcontrol-position: top left;
 	left: 14px;
-	padding: 0 6px;
+	top: 8px;
+	padding: 0;
 	color: #6b7280;
 	font-weight: 600;
-	background: #ffffff;
+	background: transparent;
 }
 
 /* ---------------------------------------------------------------- 列表 */
@@ -272,7 +291,7 @@ QListWidget#pageSelector
 
 QListWidget#pageSelector::item
 {
-	padding: 9px 10px;
+	padding: 5px 10px;
 	border-radius: 8px;
 	margin: 2px 4px;
 	color: #3a404a;
