@@ -18,6 +18,14 @@
 #include <QtGlobal>
 #include <qwindowdefs.h>
 
+#ifndef VIGIL_CORE_EXPORT
+#  if defined( vigil_core_EXPORTS )
+#    define VIGIL_CORE_EXPORT Q_DECL_EXPORT
+#  else
+#    define VIGIL_CORE_EXPORT Q_DECL_IMPORT
+#  endif
+#endif
+
 class QWidget;
 class QAbstractNativeEventFilter;
 
@@ -27,7 +35,7 @@ class QAbstractNativeEventFilter;
 // 做法与纯 Qt 的 FramelessWindowHint 不同：窗口仍然是普通顶层窗口，
 // 我们只拦截 WM_NCCALCSIZE 把非客户区吞掉，所以系统行为不受影响。
 // 其他平台不做任何事。
-class VigilWindowFrame : public QObject
+class VIGIL_CORE_EXPORT VigilWindowFrame : public QObject
 {
 	Q_OBJECT
 
