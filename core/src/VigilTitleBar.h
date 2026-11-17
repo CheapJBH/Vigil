@@ -72,6 +72,8 @@ public:
 
 	void setHeading( const QString& text );
 	void addMenu( QMenu* menu );
+	// 对话框等不可最大化的窗口用这个隐藏最大化按钮。
+	void setMaximizeButtonVisible( bool visible );
 
 protected:
 	void paintEvent( QPaintEvent* event ) override;
