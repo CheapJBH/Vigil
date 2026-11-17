@@ -42,6 +42,7 @@
 #include "VigilConfiguration.h"
 #include "MainWindow.h"
 #include "PluginManager.h"
+#include "VigilTitleBar.h"
 
 #include "ui_MainWindow.h"
 
@@ -54,6 +55,13 @@ MainWindow::MainWindow( QWidget* parent ) :
 	ui->setupUi( this );
 
 	setWindowTitle(tr("Vigil Configurator %1").arg(VigilCore::versionString()));
+
+	// 自绘标题栏：把“文件 / 视图 / 帮助”收进标题栏右侧，去掉系统标题栏。
+	auto titleBar = new VigilTitleBar(this);
+	titleBar->addMenu(ui->menu_File);
+	titleBar->addMenu(ui->menu_View);
+	titleBar->addMenu(ui->menu_Help);
+	setMenuWidget(titleBar);
 
 	loadConfigurationPagePlugins();
 
