@@ -25,6 +25,7 @@
 #include "Configuration/LocalStore.h"
 #include "ConfigurationManager.h"
 #include "Filesystem.h"
+#include "Logger.h"
 #include "PlatformCoreFunctions.h"
 #include "PlatformNetworkFunctions.h"
 #include "VigilConfiguration.h"
@@ -51,11 +52,13 @@ bool ConfigurationManager::clearConfiguration()
 
 bool ConfigurationManager::applyConfiguration()
 {
-	// update Vigil Service configuration
+	// 防杀保护会移除服务的 SERVICE_CHANGE_CONFIG 权限，此时修改自启动
+	// 属性必然失败。配置本身仍然要保存下来，所以这里只记录警告，
+	// 不再让整个应用流程失败。
 	if( VigilServiceControl().setAutostart( m_configuration.autostartService() ) == false )
 	{
-		m_errorString = tr("Could not modify the autostart property for the Vigil Service.");
-		return false;
+		vWarning() << "Could not modify the autostart property for the Vigil Service"
+					  " (service protection is probably active)";
 	}
 
 	auto& network = VigilCore::platform().networkFunctions();
