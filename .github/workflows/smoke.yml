@@ -134,7 +134,7 @@ jobs:
               if ($p.HasExited) { break }
               if ($p.MainWindowHandle -ne [IntPtr]::Zero) { $handle = $p.MainWindowHandle; break }
             }
-            Start-Sleep -Seconds 3
+            Start-Sleep -Seconds 6
             $p.Refresh()
             if ($handle -ne [IntPtr]::Zero) {
               [W.U]::ShowWindow($handle, 3) | Out-Null
@@ -203,19 +203,54 @@ jobs:
         run: |
           Add-Type -AssemblyName System.Windows.Forms
           Add-Type -AssemblyName System.Drawing
+          Add-Type -Namespace W -Name UI -MemberDefinition '[DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd); [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);'
+
           $exe = Get-ChildItem -Recurse dist -Filter '*student*.exe' | Select-Object -First 1
           if (-not $exe) { Write-Host 'no student installer, skip'; exit 0 }
+
+          function Capture([string]$path) {
+            $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+            $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+            $g = [System.Drawing.Graphics]::FromImage($bmp)
+            $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+            $g.Dispose()
+            $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
+            $bmp.Dispose()
+            Write-Host "saved $path"
+          }
+
+          # 把当前 PowerShell 窗口最小化，否则会挡住安装向导
+          $console = (Get-Process -Id $PID).MainWindowHandle
+          if ($console -ne [IntPtr]::Zero) { [W.UI]::ShowWindow($console, 6) | Out-Null }
+          Start-Sleep -Seconds 1
+
           $p = Start-Process -FilePath $exe.FullName -PassThru
-          Start-Sleep -Seconds 6
-          $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-          $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
-          $g = [System.Drawing.Graphics]::FromImage($bmp)
-          $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
-          $g.Dispose()
-          $bmp.Save((Join-Path $PWD 'shots\installer.png'), [System.Drawing.Imaging.ImageFormat]::Png)
-          $bmp.Dispose()
-          Write-Host "installer window title: '$($p.MainWindowTitle)'"
+
+          # NSIS 先解包再启动真正的安装向导（可能是新进程），
+          # 所以要按窗口标题轮询，而不是只看 Start-Process 的 pid。
+          $win = $null
+          $deadline = (Get-Date).AddSeconds(120)
+          while ((Get-Date) -lt $deadline) {
+            Start-Sleep -Seconds 2
+            foreach ($c in (Get-Process | Where-Object { $_.MainWindowHandle -ne [IntPtr]::Zero -and $_.Id -ne $PID })) {
+              if ($c.MainWindowTitle -match 'Vigil') { $win = $c; break }
+            }
+            if ($win) { break }
+          }
+
+          if ($win) {
+            Write-Host "installer window: '$($win.MainWindowTitle)' pid=$($win.Id)"
+            [W.UI]::ShowWindow($win.MainWindowHandle, 3) | Out-Null
+            [W.UI]::SetForegroundWindow($win.MainWindowHandle) | Out-Null
+            Start-Sleep -Seconds 3
+            Capture (Join-Path $PWD 'shots\installer.png')
+          } else {
+            Write-Host 'installer window did not appear in time'
+            Capture (Join-Path $PWD 'shots\installer.png')
+          }
+
           Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          if ($win) { Stop-Process -Id $win.Id -Force -ErrorAction SilentlyContinue }
 
       - name: Upload screenshots
         if: always()
