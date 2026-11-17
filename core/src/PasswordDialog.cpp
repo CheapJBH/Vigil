@@ -27,6 +27,7 @@
 
 #include "PasswordDialog.h"
 #include "PlatformUserFunctions.h"
+#include "VigilTitleBar.h"
 
 #include "ui_PasswordDialog.h"
 
@@ -36,6 +37,10 @@ PasswordDialog::PasswordDialog( QWidget *parent ) :
 	ui( new Ui::PasswordDialog )
 {
 	ui->setupUi( this );
+
+	// 自绘标题栏：登录框同样不使用系统标题栏。
+	auto titleBar = new VigilTitleBar( this );
+	ui->verticalLayout->insertWidget( 0, titleBar );
 
 	ui->username->setText(VigilCore::platform().userFunctions().queryCurrentUserProperty(PlatformUserFunctions::UserProperty::LoginName));
 
