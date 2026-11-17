@@ -159,7 +159,18 @@ jobs:
           # 2) 切到 KeyFile 认证：master 启动后不用输密码，主窗口能直接显示
           Write-Host "=== switch authentication to KeyFile ==="
           & $cli authkeys create ci-smoke 2>&1 | Out-Host
-          & $cli config set Authentication/Method KeyFile 2>&1 | Out-Host
+          & $cli config set Authentication/Method KeyFileAuthentication 2>&1 | Out-Host
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "config set exited with $LASTEXITCODE"
+          }
+          $global:LASTEXITCODE = 0
+          $configPath = 'C:\ProgramData\Vigil\Config.json'
+          if (Test-Path $configPath) {
+            Write-Host '--- Authentication section ---'
+            Select-String -Path $configPath -Pattern 'Authentication|Method' -Context 0,2 | Out-Host
+          } else {
+            Write-Host "Config.json not found at $configPath"
+          }
 
           $targets = @(
             @{ name = 'configurator'; exe = 'C:\Program Files\Vigil\vigil-configurator.exe' },
