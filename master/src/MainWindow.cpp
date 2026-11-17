@@ -34,6 +34,7 @@
 #include "AboutDialog.h"
 #include "AccessControlProvider.h"
 #include "MainWindow.h"
+#include "VigilTitleBar.h"
 #include "BuiltinFeatures.h"
 #include "AuthenticationCredentials.h"
 #include "ComputerControlListModel.h"
@@ -64,6 +65,11 @@ MainWindow::MainWindow( VigilMaster &masterCore, QWidget* parent ) :
 	m_modeGroup( new QButtonGroup( this ) )
 {
 	ui->setupUi( this );
+
+	// 自绘标题栏：系统标题栏已由 VigilWindowFrame 在 Windows 上去掉。
+	// 放在 QMainWindow 的菜单栏位置，工具栏与内容自动下移。
+	auto titleBar = new VigilTitleBar( this );
+	setMenuWidget( titleBar );
 
 	restoreState( QByteArray::fromBase64( m_master.userConfig().windowState().toUtf8() ) );
 	const auto geometryRestored =
