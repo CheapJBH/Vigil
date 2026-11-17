@@ -113,10 +113,15 @@ jobs:
           Add-Type -AssemblyName System.Drawing
           New-Item -ItemType Directory -Force shots | Out-Null
 
-          Add-Type -Namespace W -Name U -MemberDefinition '[DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd); [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow); [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect); [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left; public int Top; public int Right; public int Bottom; }'
+          Add-Type -Namespace W -Name U -MemberDefinition '[DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd); [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow); [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect); [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags); [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left; public int Top; public int Right; public int Bottom; }'
 
           function CaptureWindow([IntPtr]$handle, [string]$path) {
-            if ($handle -eq [IntPtr]::Zero) {
+            $r = New-Object 'W.U+RECT'
+            $ok = [W.U]::GetWindowRect($handle, [ref]$r)
+            $w = $r.Right - $r.Left - 2
+            $h = $r.Bottom - $r.Top - 2
+            if (-not $ok -or $w -le 0 -or $h -le 0) {
+              Write-Host "GetWindowRect failed for hwnd=$handle, falling back to full screen"
               $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
               $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
               $g = [System.Drawing.Graphics]::FromImage($bmp)
@@ -124,42 +129,26 @@ jobs:
               $g.Dispose()
               $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
               $bmp.Dispose()
-              Write-Host "saved (full screen fallback) $path"
               return
             }
 
-            $r = New-Object 'W.U+RECT'
-            [W.U]::GetWindowRect($handle, [ref]$r) | Out-Null
-            $x = $r.Left + 1
-            $y = $r.Top + 1
-            $w = $r.Right - $r.Left - 2
-            $h = $r.Bottom - $r.Top - 2
-            if ($w -le 0 -or $h -le 0) { throw 'bad window rect' }
-
             $bmp = New-Object System.Drawing.Bitmap $w, $h
             $g = [System.Drawing.Graphics]::FromImage($bmp)
-            $g.CopyFromScreen($x, $y, 0, 0, (New-Object System.Drawing.Size($w, $h)))
+            $g.CopyFromScreen(($r.Left + 1), ($r.Top + 1), 0, 0, (New-Object System.Drawing.Size($w, $h)))
             $g.Dispose()
             $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
             $bmp.Dispose()
             Write-Host "saved window ${w}x${h} -> $path"
           }
 
-          function Show-AppWindow([System.Diagnostics.Process]$p) {
-            $handle = [IntPtr]::Zero
-            for ($i = 0; $i -lt 40; $i++) {
+          function Wait-AppWindow([System.Diagnostics.Process]$p) {
+            for ($i = 0; $i -lt 60; $i++) {
               Start-Sleep -Milliseconds 500
               $p.Refresh()
-              if ($p.HasExited) { break }
-              if ($p.MainWindowHandle -ne [IntPtr]::Zero) { $handle = $p.MainWindowHandle; break }
+              if ($p.HasExited) { return [IntPtr]::Zero }
+              if ($p.MainWindowHandle -ne [IntPtr]::Zero) { return $p.MainWindowHandle }
             }
-            Start-Sleep -Seconds 6
-            $p.Refresh()
-            if ($handle -ne [IntPtr]::Zero) {
-              [W.U]::SetForegroundWindow($handle) | Out-Null
-              Start-Sleep -Seconds 2
-            }
-            return $handle
+            return [IntPtr]::Zero
           }
 
           $masterExe = 'C:\Program Files\Vigil\vigil-master.exe'
@@ -168,8 +157,10 @@ jobs:
           # 1) 登录框截图（默认 Logon 认证）
           Write-Host '=== master: login dialog ==='
           $p = Start-Process -FilePath $masterExe -PassThru
-          $h = Show-AppWindow $p
-          Start-Sleep -Seconds 1
+          $h = Wait-AppWindow $p
+          Start-Sleep -Seconds 4
+          $p.Refresh()
+          if ($p.MainWindowHandle -ne [IntPtr]::Zero) { $h = $p.MainWindowHandle }
           CaptureWindow $h (Join-Path $PWD 'shots\master-login.png')
           try { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue } catch {}
           Start-Sleep -Seconds 3
@@ -194,16 +185,30 @@ jobs:
           foreach ($t in $targets) {
             Write-Host "=== launching $($t.name) ==="
             $p = Start-Process -FilePath $t.exe -PassThru
-            $handle = Show-AppWindow $p
+            $handle = Wait-AppWindow $p
+            if ($handle -eq [IntPtr]::Zero) {
+              Write-Host "$($t.name) no main window" -ForegroundColor Red
+              $failed += "$($t.name) no main window"
+              continue
+            }
+
+            # 等待启动画面消失并让内容稳定
+            Start-Sleep -Seconds 8
             $p.Refresh()
             if ($p.HasExited) {
               Write-Host "$($t.name) EXITED with code $($p.ExitCode)" -ForegroundColor Red
               $failed += "$($t.name) exited ($($p.ExitCode))"
               continue
             }
+            if ($p.MainWindowHandle -ne [IntPtr]::Zero) { $handle = $p.MainWindowHandle }
+
+            # 统一成适合 README 的窗口尺寸（CI 屏幕是 1024x768）
+            [W.U]::SetWindowPos($handle, [IntPtr]::Zero, 24, 24, 960, 700, 0x0004) | Out-Null
+            [W.U]::SetForegroundWindow($handle) | Out-Null
+            Start-Sleep -Seconds 3
+
             Write-Host "$($t.name) alive, pid=$($p.Id), hwnd=$handle, title='$($p.MainWindowTitle)'"
             CaptureWindow $handle (Join-Path $PWD "shots\$($t.name).png")
-            if ($handle -eq [IntPtr]::Zero) { $failed += "$($t.name) no main window" }
             try { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue } catch {}
             Start-Sleep -Seconds 3
           }
