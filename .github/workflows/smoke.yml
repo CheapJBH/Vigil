@@ -126,15 +126,7 @@ jobs:
             Write-Host "saved $path"
           }
 
-          $targets = @(
-            @{ name = 'configurator'; exe = 'C:\Program Files\Vigil\vigil-configurator.exe' },
-            @{ name = 'master';       exe = 'C:\Program Files\Vigil\vigil-master.exe' }
-          )
-
-          $failed = @()
-          foreach ($t in $targets) {
-            Write-Host "=== launching $($t.name) ==="
-            $p = Start-Process -FilePath $t.exe -PassThru
+          function Show-AppWindow([System.Diagnostics.Process]$p) {
             $handle = [IntPtr]::Zero
             for ($i = 0; $i -lt 30; $i++) {
               Start-Sleep -Milliseconds 500
@@ -144,17 +136,48 @@ jobs:
             }
             Start-Sleep -Seconds 3
             $p.Refresh()
+            if ($handle -ne [IntPtr]::Zero) {
+              [W.U]::ShowWindow($handle, 3) | Out-Null
+              [W.U]::SetForegroundWindow($handle) | Out-Null
+              Start-Sleep -Seconds 2
+            }
+            return $handle
+          }
+
+          $masterExe = 'C:\Program Files\Vigil\vigil-master.exe'
+          $cli = 'C:\Program Files\Vigil\vigil-cli.exe'
+
+          # 1) 登录框截图（默认 Logon 认证）
+          Write-Host "=== master: login dialog ==="
+          $p = Start-Process -FilePath $masterExe -PassThru
+          $h = Show-AppWindow $p
+          Start-Sleep -Seconds 2
+          Capture (Join-Path $PWD 'shots\master-login.png')
+          try { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue } catch {}
+          Start-Sleep -Seconds 2
+
+          # 2) 切到 KeyFile 认证：master 启动后不用输密码，主窗口能直接显示
+          Write-Host "=== switch authentication to KeyFile ==="
+          & $cli authkeys create ci-smoke 2>&1 | Out-Host
+          & $cli config set Authentication/Method KeyFile 2>&1 | Out-Host
+
+          $targets = @(
+            @{ name = 'configurator'; exe = 'C:\Program Files\Vigil\vigil-configurator.exe' },
+            @{ name = 'master';       exe = $masterExe }
+          )
+
+          $failed = @()
+          foreach ($t in $targets) {
+            Write-Host "=== launching $($t.name) ==="
+            $p = Start-Process -FilePath $t.exe -PassThru
+            $handle = Show-AppWindow $p
+            $p.Refresh()
             if ($p.HasExited) {
               Write-Host "$($t.name) EXITED with code $($p.ExitCode)" -ForegroundColor Red
               $failed += "$($t.name) exited ($($p.ExitCode))"
               continue
             }
             Write-Host "$($t.name) alive, pid=$($p.Id), hwnd=$handle, title='$($p.MainWindowTitle)'"
-            if ($handle -ne [IntPtr]::Zero) {
-              [W.U]::ShowWindow($handle, 3) | Out-Null
-              [W.U]::SetForegroundWindow($handle) | Out-Null
-              Start-Sleep -Seconds 2
-            }
             Capture (Join-Path $PWD "shots\$($t.name).png")
             if ($handle -eq [IntPtr]::Zero) { $failed += "$($t.name) no main window" }
             try { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue } catch {}
