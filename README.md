@@ -186,6 +186,8 @@ PC-02,192.168.1.12
 |:---:|:---:|
 | ![配置器](docs/screenshots/configurator.png) | ![安装向导](docs/screenshots/installer.png) |
 
+> 以上截图来自 Windows Server 2022 上的真实运行（GitHub Actions Runner）：教师端左侧已挂载「教室」分组下的 9 台机位，右侧 9 张缩略图是**通过 VNC 实际连上学生端后抓取的实时桌面画面**，不是占位图。
+
 
 - Qt Widgets 实现，不背 QML 运行时的包袱
 - 缩略图网格由自定义 item delegate 绘制：圆角边框、状态描边、功能角标
@@ -405,6 +407,8 @@ PC-02,192.168.1.12
 | Configurator | Installer |
 |:---:|:---:|
 | ![Configurator](docs/screenshots/configurator.png) | ![Installer](docs/screenshots/installer.png) |
+
+> Captured from a real run on a Windows Server 2022 GitHub Actions runner: the console is bound to a "classroom" group with 9 machines, and the 9 thumbnails are live desktops pulled over actual VNC connections to the student service - not placeholder images.
 
 
 - Qt Widgets, no QML runtime overhead
