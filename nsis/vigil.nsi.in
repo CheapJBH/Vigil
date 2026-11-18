@@ -59,6 +59,14 @@ RequestExecutionLevel admin
 !endif
 !cd "${NSIS_DIR}"
 
+######################################################################
+# 防删保护：口令相关
+Var UnlockCode      ; 卸载页 / /Unlock= 收集到的口令
+Var UnlockInput     ; 卸载页输入框句柄
+Var GuardInstalled  ; 本机是否已启用防删保护
+
+!define UNLOCK_HELP "本机已启用防删保护（程序文件无法删除）。$\r$\n覆盖安装或卸载需要教师口令：$\r$\n$\r$\n  /Unlock=<口令>$\r$\n$\r$\n口令由教师端“课堂口令”统一设置。"
+
 !define MUI_ABORTWARNING
 !define MUI_UNABORTWARNING
 
@@ -94,6 +102,8 @@ RequestExecutionLevel admin
 !insertmacro MUI_PAGE_FINISH
 
 !insertmacro MUI_UNPAGE_CONFIRM
+
+UninstPage custom un.UnlockPage un.UnlockPageLeave
 
 !insertmacro MUI_UNPAGE_INSTFILES
 
@@ -318,6 +328,26 @@ ${If} $0 != "admin"
 	SetErrorLevel 740 ;ERROR_ELEVATION_REQUIRED
 	Quit
 ${EndIf}
+
+# 已启用防删保护时，覆盖安装必须先解锁，否则连旧文件都删不掉
+ReadRegStr $2 HKLM "SOFTWARE\VigilGuard" "Hash"
+${If} $2 != ""
+	StrCpy $GuardInstalled "1"
+	${GetParameters} $R3
+	${GetOptions} $R3 "/Unlock=" $R4
+	${If} $R4 == ""
+		MessageBox MB_OK|MB_ICONSTOP "${UNLOCK_HELP}"
+		SetErrorLevel 1
+		Quit
+	${EndIf}
+	ExecWait '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\netguard\VigilGuard.ps1" -Release -Password "$R4"' $5
+	${If} $5 != 0
+		MessageBox MB_OK|MB_ICONSTOP "口令错误，无法覆盖安装。"
+		SetErrorLevel 1
+		Quit
+	${EndIf}
+	DeleteRegValue HKLM "SOFTWARE\VigilGuard" "Released"
+${EndIf}
 FunctionEnd
 
 ######################################################################
@@ -349,6 +379,28 @@ SectionEnd
 
 Section Uninstall
 ${INSTALL_TYPE}
+
+# ---- 防删保护：先验口令解锁，否则后面一个文件都删不掉
+ReadRegStr $2 HKLM "SOFTWARE\VigilGuard" "Hash"
+${If} $2 != ""
+	${If} $UnlockCode == ""
+		${GetParameters} $R0
+		${GetOptions} $R0 "/Unlock=" $UnlockCode
+	${EndIf}
+	${If} $UnlockCode == ""
+		MessageBox MB_OK|MB_ICONSTOP "${UNLOCK_HELP}"
+		Abort
+	${EndIf}
+	ExecWait '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\netguard\VigilGuard.ps1" -Release -Password "$UnlockCode"' $3
+	${If} $3 != 0
+		MessageBox MB_OK|MB_ICONSTOP "口令错误，已取消卸载。"
+		Abort
+	${EndIf}
+
+	# 先摘掉策略代理任务，避免它在卸载过程中把保护重新加上
+	ExecWait '"$SYSDIR\schtasks.exe" /Delete /TN "VigilPolicyAgent" /F' $4
+	DeleteRegKey HKLM "SOFTWARE\VigilGuard"
+${EndIf}
 
 !ifndef EDITION_TEACHER
 ExecWait '"$INSTDIR\vigil-wcli.exe" config set Service/SoftwareSASEnabled 0'
@@ -405,6 +457,41 @@ SectionEnd
 
 Function un.onInit
 !insertmacro MUI_UNGETLANGUAGE
+FunctionEnd
+
+######################################################################
+
+; 卸载页：仅当本机启用了防删保护才出现，用于收集教师口令
+Function un.UnlockPage
+	ReadRegStr $0 HKLM "SOFTWARE\VigilGuard" "Hash"
+	${If} $0 == ""
+		Abort
+	${EndIf}
+
+	!insertmacro MUI_HEADER_TEXT "解除防删保护" "本机程序文件已锁定，卸载前需要教师口令。"
+	nsDialogs::Create 1018
+	Pop $0
+	${If} $0 == error
+		Abort
+	${EndIf}
+
+	${NSD_CreateLabel} 0 0 100% 30u "本机已启用防删保护，程序目录即使管理员也无法删除。$\r$\n请输入教师口令以解除保护并继续卸载。"
+	Pop $0
+
+	${NSD_CreateLabel} 0 38u 40u 12u "口令："
+	Pop $0
+	${NSD_CreatePassword} 40u 36u -40u 14u ""
+	Pop $UnlockInput
+
+	nsDialogs::Show
+FunctionEnd
+
+Function un.UnlockPageLeave
+	${NSD_GetText} $UnlockInput $UnlockCode
+	${If} $UnlockCode == ""
+		MessageBox MB_OK|MB_ICONEXCLAMATION "请输入口令。"
+		Abort
+	${EndIf}
 FunctionEnd
 
 ######################################################################
