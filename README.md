@@ -45,17 +45,18 @@ Vigil 是一套免费的机房与数字教室管理软件。教师的机器上�
 | 🔦 | **聚光灯** | 放大显示选定的一批机器，其余变暗 |
 | 🗂 | **机房目录** | 从 CSV 批量导入机位，或从 LDAP 拉取用户组 |
 | 🔌 | **Web API** | 通过 HTTP 调用任意功能，方便接自建系统 |
+| 🛡 | **防删保护** | 程序文件加 Deny Delete 权限，本地管理员没有口令也删不掉 |
 
 ## 安装
 
 ### Windows（64 位）
 
-到 [Releases](../../releases) 页面下载 **`vigil-4.11.4.0-win64-setup.exe`**，双击安装。
+到 [Releases](../../releases) 页面下载安装包，教师机装 **`vigil-teacher-4.11.4.0-win64-setup.exe`**，学生机装 **`vigil-student-4.11.4.0-win64-setup.exe`**，双击安装。
 
 安装程序会做这几件事：
 
 1. 安装主控端、后台服务、执行器与配置工具
-2. 注册并启动 `Vigil` 系统服务
+2. 注册并启动 `Vigil` 系统服务（启动类型固定为**自动**，随系统开机自启）
 3. 为服务端口添加 Windows 防火墙例外
 4. 创建开始菜单与桌面快捷方式
 
@@ -64,9 +65,28 @@ Vigil 是一套免费的机房与数字教室管理软件。教师的机器上�
 > 服务以 `LocalSystem` 身份运行，才能管理用户会话与电源状态。
 > 第一次进机房前，先用 **Vigil Configurator** 配好网络与认证。
 
+#### 防删保护
+
+教师端下发“课堂口令”后，学生机会自动加固：
+
+- 程序目录加入 `Deny Delete` 权限，**本地管理员也删不掉** `C:\Program Files\Vigil` 里的任何文件
+- 系统服务移除 `SERVICE_STOP` / `SERVICE_CHANGE_CONFIG`，`net stop`、服务管理器、任务管理器都停不掉
+- 服务被强杀后由 SCM 一秒内拉起，另有隐藏的 SYSTEM 计划任务每 2 分钟补位
+- 服务启动类型固定为 `Automatic`，重启后自动恢复
+
+卸载或覆盖安装需要先解除保护：卸载程序会弹出口令输入框，静默卸载传 `/Unlock=<口令>`。
+
+```cmd
+uninstall.exe /S /Unlock=1234
+```
+
+口令错误会直接取消操作。需要说明的是，取得所有权后改写 DACL 仍可绕过——本方案的目标是“随手关不掉”，不是内核级 PPL 防护。
+
 ### 卸载
 
 控制面板 → *程序和功能* → **Vigil**。服务会自动停止并注销。
+
+若已启用防删保护，卸载向导会先要求输入教师口令；口令正确才继续删除文件。
 
 ## 从源码构建
 
@@ -233,17 +253,19 @@ Built for the case where a teacher has 40 students, 40 PCs, and 45 minutes.
 | 🔦 | **Spotlight** | Zoom into a chosen subset and dim the rest |
 | 🗂 | **Directory** | Import rooms from CSV, or pull groups from LDAP |
 | 🔌 | **Web API** | Drive any feature over HTTP for custom integrations |
+| 🛡 | **Anti-delete** | Program files get a Deny Delete ACE — even local admins can't remove them without the code |
 
 ## Installation
 
 ### Windows (64-bit)
 
-Download **`vigil-4.11.4.0-win64-setup.exe`** from the [Releases](../../releases) page and run it.
+Download the installer from the [Releases](../../releases) page — **`vigil-teacher-4.11.4.0-win64-setup.exe`**
+for the teacher machine, **`vigil-student-4.11.4.0-win64-setup.exe`** for student machines.
 
 The installer:
 
 1. Installs the master application, service, worker, and configurator
-2. Registers and starts the `Vigil` background service
+2. Registers and starts the `Vigil` background service (start type **Automatic**, runs at boot)
 3. Adds a Windows Firewall exception for the service port
 4. Creates Start Menu and desktop shortcuts
 
@@ -252,10 +274,35 @@ The installer:
 > The service runs as `LocalSystem` so it can manage sessions and power state.
 > Configure it via **Vigil Configurator** before first classroom use.
 
+#### Anti-delete protection
+
+Once the teacher pushes a classroom code, student machines harden themselves automatically:
+
+- A `Deny Delete` ACE is added to the install directory, so **even a local administrator cannot
+  delete anything** under `C:\Program Files\Vigil`
+- The service drops `SERVICE_STOP` / `SERVICE_CHANGE_CONFIG` — `net stop`, the Services console,
+  and Task Manager all fail to stop it
+- SCM restarts the service within a second if it is killed, plus a hidden SYSTEM scheduled task
+  re-arms it every two minutes
+- Start type is pinned to `Automatic`, so it comes back after a reboot
+
+Uninstalling or reinstalling requires unlocking first: the uninstaller prompts for the teacher
+code, and silent uninstalls take `/Unlock=<code>`.
+
+```cmd
+uninstall.exe /S /Unlock=1234
+```
+
+A wrong code aborts the operation. Taking ownership and rewriting the DACL still bypasses this —
+the goal is "not casually removable", not kernel-level PPL protection.
+
 ### Uninstall
 
 Control Panel → *Programs and Features* → **Vigil**. The service is stopped and unregistered
 automatically.
+
+If anti-delete protection is active, the uninstall wizard asks for the teacher code before
+removing any file.
 
 ## Build from source
 
