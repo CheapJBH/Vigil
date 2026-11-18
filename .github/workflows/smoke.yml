@@ -156,6 +156,19 @@ jobs:
           if ($stillDenied) { throw 'Deny Delete ACE still present after release' }
           Write-Host 'anti-delete protection OK'
 
+      - name: Install student edition (simulated classroom)
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Recurse dist -Filter '*student*.exe' | Select-Object -First 1
+          if (-not $exe) { throw 'student installer not found' }
+          Write-Host "installing $($exe.Name) into C:\VigilStudent"
+          $p = Start-Process -FilePath $exe.FullName -ArgumentList '/S', '/D=C:\VigilStudent' -Wait -PassThru
+          Write-Host "installer exit=$($p.ExitCode)"
+          Start-Sleep -Seconds 10
+          if (-not (Test-Path 'C:\VigilStudent\vigil-server.exe')) { throw 'student edition not installed' }
+          Get-Service VigilService -ErrorAction SilentlyContinue | Format-List Name, Status, StartType
+          Get-Process vigil-server, vigil-service -ErrorAction SilentlyContinue | Select-Object Name, Id, SessionId | Format-Table
+
       - name: Launch GUIs and capture screenshots
         shell: pwsh
         run: |
@@ -226,6 +239,49 @@ jobs:
             Select-String -Path $configPath -Pattern 'Method' -Context 0,1 | Out-Host
           }
 
+          # --- 模拟教室：同一个 runner 上跑学生端服务，暴露 9 台内网机位 ---
+          Write-Host '=== prepare simulated classroom ==='
+          Restart-Service VigilService -ErrorAction SilentlyContinue
+          $serverPort = 0
+          for ($i = 0; $i -lt 15; $i++) {
+            Start-Sleep -Seconds 1
+            $svrPids = @((Get-Process vigil-server -ErrorAction SilentlyContinue).Id)
+            if ($svrPids.Count -gt 0) {
+              $conn = Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
+                      Where-Object { $svrPids -contains $_.OwningProcess -and $_.LocalPort -ge 11100 -and $_.LocalPort -lt 11200 }
+              if ($conn) { $serverPort = ($conn | Select-Object -First 1).LocalPort; break }
+            }
+          }
+          if ($serverPort -eq 0) { Write-Host 'WARNING: server port not detected, falling back to 11100'; $serverPort = 11100 }
+          Write-Host "Vigil server port = $serverPort"
+          Get-Process vigil-server -ErrorAction SilentlyContinue | Select-Object Id, SessionId | Format-Table
+
+          $cfg = (Get-Content $configPath -Raw) | ConvertFrom-Json
+          if (-not $cfg.PSObject.Properties['NetworkObjectDirectory']) {
+            $cfg | Add-Member -NotePropertyName NetworkObjectDirectory -NotePropertyValue ([pscustomobject]@{})
+          }
+          $cfg.NetworkObjectDirectory | Add-Member -NotePropertyName Plugin `
+            -NotePropertyValue '14bacaaa-ebe5-449c-b881-5b382f952571' -Force
+
+          $classroom = @()
+          for ($i = 1; $i -le 9; $i++) {
+            $classroom += [pscustomobject]@{
+              Type        = 3
+              Uid         = [guid]::NewGuid().ToString()
+              Name        = ('PC-{0:D2}' -f $i)
+              HostAddress = "127.0.0.$($i + 1):$serverPort"
+            }
+          }
+          if (-not $cfg.PSObject.Properties['BuiltinDirectory']) {
+            $cfg | Add-Member -NotePropertyName BuiltinDirectory -NotePropertyValue ([pscustomobject]@{})
+          }
+          $cfg.BuiltinDirectory | Add-Member -NotePropertyName NetworkObjects `
+            -NotePropertyValue ([pscustomobject]@{ JsonStoreArray = $classroom }) -Force
+
+          $json = $cfg | ConvertTo-Json -Depth 20
+          [System.IO.File]::WriteAllText($configPath, $json, (New-Object System.Text.UTF8Encoding($false)))
+          Write-Host "wrote 9 hosts (127.0.0.2-10:$serverPort) to $configPath"
+
           $targets = @(
             @{ name = 'configurator'; exe = 'C:\Program Files\Vigil\vigil-configurator.exe' },
             @{ name = 'master';       exe = $masterExe }
@@ -242,8 +298,10 @@ jobs:
               continue
             }
 
-            # 等待启动画面消失并让内容稳定
-            Start-Sleep -Seconds 8
+            # 等待启动画面消失；master 还要等 9 台模拟机位完成连接与缩略图
+            $wait = if ($t.name -eq 'master') { 30 } else { 8 }
+            Write-Host "waiting $wait s for $($t.name)"
+            Start-Sleep -Seconds $wait
             $p.Refresh()
             if ($p.HasExited) {
               Write-Host "$($t.name) EXITED with code $($p.ExitCode)" -ForegroundColor Red
