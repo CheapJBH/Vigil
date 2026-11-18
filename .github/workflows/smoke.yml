@@ -300,6 +300,23 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'failed to write BuiltinDirectory/NetworkObjects' }
           $global:LASTEXITCODE = 0
 
+          # 主区域显示的是"已勾选"的计算机，默认全未勾选 -> 需要写入 UserConfig
+          # UI/CheckedNetworkObjects 存在 %APPDATA%\Vigil\Config\VigilMaster.json
+          $checkedUids = @()
+          foreach ($c in $classroom) {
+            if ($c.Type -eq 3) { $checkedUids += $c.Uid }
+          }
+          $userCfgDir = Join-Path $env:APPDATA 'Vigil\Config'
+          New-Item -ItemType Directory -Force -Path $userCfgDir | Out-Null
+          $userCfgPath = Join-Path $userCfgDir 'VigilMaster.json'
+          $userCfg = @{ UI = @{ CheckedNetworkObjects = @{ JsonStoreArray = $checkedUids } } }
+          ($userCfg | ConvertTo-Json -Depth 10) | Set-Content -Path $userCfgPath -Encoding UTF8
+          Write-Host "user config -> $userCfgPath"
+          Get-Content $userCfgPath -Raw | Out-Host
+
+          & $cli config set Master/AutoOpenComputerSelectPanel true 2>&1 | Out-Host
+          $global:LASTEXITCODE = 0
+
           Write-Host '--- verify BuiltinDirectory/NetworkObjects from registry ---'
           & $cli config get 'BuiltinDirectory/NetworkObjects' 2>&1 | Out-Host
           $global:LASTEXITCODE = 0
