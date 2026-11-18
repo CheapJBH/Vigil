@@ -70,7 +70,10 @@ param(
     [Parameter(ParameterSetName = 'Status')]
     [switch]$Status,
 
-    [string]$ServiceName = 'VigilService'
+    [string]$ServiceName = 'VigilService',
+
+    # 受保护的程序目录，默认自动推断（注册表 InstallDir 或脚本上级目录）
+    [string]$GuardDir
 )
 
 $ErrorActionPreference = 'Stop'
@@ -149,7 +152,10 @@ function Set-ServiceStopProtection {
     param([string]$Name)
 
     $svc = Get-Service -Name $Name -ErrorAction SilentlyContinue
-    if (-not $svc) { throw "服务不存在: $Name" }
+    if (-not $svc) {
+        Write-Host "  $Name : 服务不存在，跳过服务加固（仅保护文件）" -ForegroundColor Yellow
+        return
+    }
 
     # 崩溃 / 被强杀后自动拉起
     & sc.exe failure $Name reset= 0 actions= restart/1000/restart/1000/restart/1000 | Out-Null
@@ -189,6 +195,63 @@ function Set-ServiceAutoStart {
     # 依赖网络栈，确保开机时网卡已就绪
     & sc.exe config $Name depend= Tcpip/Afd | Out-Null
     Write-Host "  $Name : 启动类型 Automatic，开机自启" -ForegroundColor Green
+}
+
+# ---------------------------------------------------------------- 文件保护
+
+function Get-InstallDir {
+    if ($GuardDir -and (Test-Path $GuardDir)) { return (Resolve-Path $GuardDir).Path }
+    if (Test-Path $RegRoot) {
+        $d = (Get-ItemProperty $RegRoot -Name InstallDir -ErrorAction SilentlyContinue).InstallDir
+        if ($d -and (Test-Path $d)) { return $d }
+    }
+    return (Split-Path $PSScriptRoot -Parent)
+}
+
+function Test-FileProtection {
+    param([string]$Dir)
+    if (-not (Test-Path $Dir)) { return $false }
+    try { $acl = Get-Acl -LiteralPath $Dir } catch { return $false }
+    $deny = $acl.Access | Where-Object {
+        $_.AccessControlType -eq 'Deny' -and
+        ($_.IdentityReference.Value -match 'S-1-5-32-544|Administrators') -and
+        (($_.FileSystemRights -band [Security.AccessControl.FileSystemRights]::Delete) -ne 0)
+    }
+    return [bool]$deny
+}
+
+function Set-FileProtection {
+    param([string]$Dir)
+    if (-not (Test-Path $Dir)) { Write-Warning "安装目录不存在: $Dir"; return }
+
+    $sidSystem = '*S-1-5-18'
+    $sidAdmins = '*S-1-5-32-544'
+    $sidUsers  = '*S-1-5-32-545'
+
+    # 断开继承，重建精简 DACL：SYSTEM/管理员完全控制，普通用户只读运行
+    & icacls.exe $Dir /inheritance:r | Out-Null
+    & icacls.exe $Dir /grant:r "${sidSystem}:(OI)(CI)F" "${sidAdmins}:(OI)(CI)F" "${sidUsers}:(OI)(CI)RX" | Out-Null
+
+    # Deny 优先于 Allow：即使管理员也无法删除目录本身和其中的文件
+    $out = & icacls.exe $Dir /deny "${sidAdmins}:(OI)(CI)(DE,DC)" 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warning "文件保护设置失败: $out"
+        return
+    }
+    Write-Host "  文件保护: $Dir（管理员不可删除，需口令解锁）" -ForegroundColor Green
+}
+
+function Set-FileProtectionOpen {
+    param([string]$Dir)
+    if (-not (Test-Path $Dir)) { return }
+    # /T 递归移除继承下来的 Deny，再恢复继承
+    & icacls.exe $Dir /remove:d '*S-1-5-32-544' /T /C | Out-Null
+    & icacls.exe $Dir /inheritance:e /T /C | Out-Null
+    if (Test-FileProtection $Dir) {
+        Write-Warning "文件保护未完全解除，请手动检查: $Dir"
+    } else {
+        Write-Host "  文件保护已解除: $Dir" -ForegroundColor Yellow
+    }
 }
 
 function Install-GuardTask {
@@ -265,6 +328,12 @@ switch ($script:ParamSet) {
         $t = Get-ScheduledTask -TaskName $taskName -TaskPath $TaskFolder -ErrorAction SilentlyContinue
         Write-Host "守护任务: $(if ($t) { "$($t.State) ($TaskFolder\$taskName)" } else { '未安装' })"
         Write-Host "口令: $(if (Test-Path $RegRoot) { '已设置' } else { '未设置' })"
+        $dir = Get-InstallDir
+        if (Test-FileProtection $dir) {
+            Write-Host "文件保护: 已启用（管理员不可删除: $dir）" -ForegroundColor Green
+        } else {
+            Write-Host "文件保护: 未启用（$dir）" -ForegroundColor Yellow
+        }
     }
 
     'Install' {
@@ -282,6 +351,11 @@ switch ($script:ParamSet) {
 
         Set-ServiceAutoStart -Name $ServiceName
         Set-ServiceStopProtection -Name $ServiceName
+
+        $dir = Get-InstallDir
+        Set-ItemProperty $RegRoot -Name InstallDir -Value $dir
+        Set-FileProtection -Dir $dir
+
         Write-Host 'Vigil Guard 部署完成。' -ForegroundColor Green
     }
 
@@ -291,6 +365,12 @@ switch ($script:ParamSet) {
         Set-ServiceAutoStart -Name $ServiceName
         Set-ServiceStopProtection -Name $ServiceName
         Install-GuardTask | Out-Null
+
+        $dir = Get-InstallDir
+        if (-not (Test-Path $RegRoot)) { New-Item -Path $RegRoot -Force | Out-Null }
+        Set-ItemProperty $RegRoot -Name InstallDir -Value $dir
+        Set-FileProtection -Dir $dir
+
         Write-Host '加固完成。' -ForegroundColor Green
     }
 
@@ -306,12 +386,18 @@ switch ($script:ParamSet) {
 
     'Release' {
         Assert-Admin
-        if (-not (Test-Password $Password)) {
+        $ok = $false
+        try { $ok = Test-Password $Password } catch { Write-Host $_.Exception.Message -ForegroundColor Red }
+        if (-not $ok) {
             Write-Host '口令错误，拒绝解除。' -ForegroundColor Red
             exit 1
         }
+
+        # 先放开文件权限，否则卸载程序/覆盖安装无法删除程序目录
+        Set-FileProtectionOpen -Dir (Get-InstallDir)
         Remove-GuardTask
         Set-ServiceStopOpen -Name $ServiceName
-        Write-Host '已解除保护，现在可以正常停止服务。' -ForegroundColor Green
+        if (Test-Path $RegRoot) { Set-ItemProperty $RegRoot -Name Released -Value 1 -Type DWord }
+        Write-Host '已解除保护，现在可以正常卸载或停止服务。' -ForegroundColor Green
     }
 }
