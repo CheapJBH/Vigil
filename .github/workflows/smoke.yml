@@ -345,6 +345,22 @@ jobs:
           }
 
           Get-ChildItem shots | Select-Object Name, Length | Format-Table -AutoSize
+
+          # dump 客户端日志，定位目录/认证问题
+          Write-Host '=== master/configurator logs ==='
+          foreach ($pat in @('C:\Windows\Temp\VigilMaster*.log', 'C:\Windows\Temp\VigilConfigurator*.log', (Join-Path $env:TEMP 'VigilMaster*.log'))) {
+            Get-ChildItem $pat -ErrorAction SilentlyContinue | ForEach-Object {
+              Write-Host "--- $($_.FullName) ---"
+              Get-Content $_.FullName -Tail 60 -ErrorAction SilentlyContinue | Out-Host
+            }
+          }
+
+          # dump 已配置的网络对象（CLI 读注册表）
+          & $cli config get 'BuiltinDirectory/NetworkObjects' 2>&1 | Out-Host
+          $global:LASTEXITCODE = 0
+          & $cli config get 'NetworkObjectDirectory/Plugin' 2>&1 | Out-Host
+          $global:LASTEXITCODE = 0
+
           if ($failed.Count -gt 0) { throw "GUI smoke failures: $($failed -join '; ')" }
 
       - name: Capture installer UI screenshot
