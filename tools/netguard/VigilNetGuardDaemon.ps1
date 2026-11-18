@@ -41,7 +41,7 @@ if ($Install) {
     $trigger = New-ScheduledTaskTrigger -AtStartup
     $trigger2 = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) `
         -RepetitionInterval (New-TimeSpan -Minutes 1) `
-        -RepetitionDuration ([TimeSpan]::MaxValue)
+        -RepetitionDuration ([TimeSpan]::FromDays(3650))
     $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
     $settings  = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries `
         -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances IgnoreNew
