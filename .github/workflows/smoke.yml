@@ -234,10 +234,8 @@ jobs:
           & $cli config set Authentication/Method KeyFileAuthentication 2>&1 | Out-Host
           if ($LASTEXITCODE -ne 0) { Write-Host "config set exited with $LASTEXITCODE" }
           $global:LASTEXITCODE = 0
-          $configPath = 'C:\ProgramData\Vigil\SystemConfig.json'
-          if (Test-Path $configPath) {
-            Select-String -Path $configPath -Pattern 'Method' -Context 0,1 | Out-Host
-          }
+          # 配置实际存储在注册表 HKEY_LOCAL_MACHINE\SOFTWARE\Vigil Solutions\Vigil（Configuration::LocalStore）
+          # 因此所有写入都走 vigil-cli，而不是手改 JSON 文件
 
           # --- 模拟教室：同一个 runner 上跑学生端服务，暴露 9 台内网机位 ---
           Write-Host '=== prepare simulated classroom ==='
@@ -257,10 +255,7 @@ jobs:
             $cands = $cands | Sort-Object -Unique
             if ($cands.Count -gt 0) {
               Write-Host "listening 11xxx ports: $($cands -join ',')"
-              $svr = @(Get-Process vigil-server -ErrorAction SilentlyContinue)
-              $expected = 0
-              if ($svr.Count -gt 0) { $expected = 11100 + $svr[0].SessionId }
-              if ($cands -contains $expected) { $serverPort = $expected } else { $serverPort = $cands[0] }
+              $serverPort = $cands[0]
               break
             }
             Start-Sleep -Seconds 1
@@ -268,47 +263,39 @@ jobs:
           if ($serverPort -eq 0) {
             Write-Host '===== DIAGNOSTICS: no 11xxx listener ====='
             Get-Process vigil-server, vigil-service -ErrorAction SilentlyContinue | Select-Object Name, Id, SessionId | Format-Table | Out-Host
-            Write-Host '--- service ---'
             Get-Service VigilService -ErrorAction SilentlyContinue | Format-List Name, Status, StartType | Out-Host
-            Write-Host '--- all listening ports 11000-12000 ---'
             (netstat -ano) | Select-String ':1[12]\d{3}\s' | Out-Host
-            Write-Host '--- server log (C:\Windows\Temp) ---'
-            Get-ChildItem 'C:\Windows\Temp\Vigil*.log' -ErrorAction SilentlyContinue | Out-Host
             Get-Content 'C:\Windows\Temp\Vigil*.log' -Tail 60 -ErrorAction SilentlyContinue | Out-Host
-            Write-Host '--- server log (user temp) ---'
-            Get-ChildItem (Join-Path $env:TEMP 'Vigil*.log') -ErrorAction SilentlyContinue | Out-Host
             Get-Content (Join-Path $env:TEMP 'Vigil*.log') -Tail 60 -ErrorAction SilentlyContinue | Out-Host
             throw 'Vigil server port not detected'
           }
           Write-Host "Vigil server port = $serverPort"
           Get-Process vigil-server -ErrorAction SilentlyContinue | Select-Object Id, SessionId | Format-Table
-          if (-not (Test-Path $configPath)) { throw "config file missing: $configPath" }
 
-          $cfg = (Get-Content $configPath -Raw) | ConvertFrom-Json
-          if (-not $cfg.PSObject.Properties['NetworkObjectDirectory']) {
-            $cfg | Add-Member -NotePropertyName NetworkObjectDirectory -NotePropertyValue ([pscustomobject]@{})
-          }
-          $cfg.NetworkObjectDirectory | Add-Member -NotePropertyName Plugin `
-            -NotePropertyValue '14bacaaa-ebe5-449c-b881-5b382f952571' -Force
+          # 注册表里把网络对象目录切到 BuiltinDirectory，并写入 9 台机位
+          & $cli config set NetworkObjectDirectory/Plugin '14bacaaa-ebe5-449c-b881-5b382f952571' 2>&1 | Out-Host
+          if ($LASTEXITCODE -ne 0) { throw 'failed to set NetworkObjectDirectory/Plugin' }
+          $global:LASTEXITCODE = 0
 
           $classroom = @()
           for ($i = 1; $i -le 9; $i++) {
-            $classroom += [pscustomobject]@{
+            $classroom += [ordered]@{
               Type        = 3
               Uid         = [guid]::NewGuid().ToString()
               Name        = ('PC-{0:D2}' -f $i)
               HostAddress = "127.0.0.$($i + 1):$serverPort"
             }
           }
-          if (-not $cfg.PSObject.Properties['BuiltinDirectory']) {
-            $cfg | Add-Member -NotePropertyName BuiltinDirectory -NotePropertyValue ([pscustomobject]@{})
-          }
-          $cfg.BuiltinDirectory | Add-Member -NotePropertyName NetworkObjects `
-            -NotePropertyValue ([pscustomobject]@{ JsonStoreArray = $classroom }) -Force
+          $json = ConvertTo-Json -InputObject @($classroom) -Depth 5 -Compress
+          Write-Host "classroom json: $json"
+          & $cli config set 'BuiltinDirectory/NetworkObjects' $json 'json' 2>&1 | Out-Host
+          if ($LASTEXITCODE -ne 0) { throw 'failed to write BuiltinDirectory/NetworkObjects' }
+          $global:LASTEXITCODE = 0
 
-          $json = $cfg | ConvertTo-Json -Depth 20
-          [System.IO.File]::WriteAllText($configPath, $json, (New-Object System.Text.UTF8Encoding($false)))
-          Write-Host "wrote 9 hosts (127.0.0.2-10:$serverPort) to $configPath"
+          Write-Host '--- verify BuiltinDirectory/NetworkObjects from registry ---'
+          & $cli config get 'BuiltinDirectory/NetworkObjects' 2>&1 | Out-Host
+          $global:LASTEXITCODE = 0
+          Write-Host "wrote 9 hosts (127.0.0.2-10:$serverPort)"
 
           $targets = @(
             @{ name = 'configurator'; exe = 'C:\Program Files\Vigil\vigil-configurator.exe' },
