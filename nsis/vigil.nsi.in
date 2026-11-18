@@ -63,7 +63,6 @@ RequestExecutionLevel admin
 # 防删保护：口令相关
 Var UnlockCode      ; 卸载页 / /Unlock= 收集到的口令
 Var UnlockInput     ; 卸载页输入框句柄
-Var GuardInstalled  ; 本机是否已启用防删保护
 
 !define UNLOCK_HELP "本机已启用防删保护（程序文件无法删除）。$\r$\n覆盖安装或卸载需要教师口令：$\r$\n$\r$\n  /Unlock=<口令>$\r$\n$\r$\n口令由教师端“课堂口令”统一设置。"
 
@@ -332,7 +331,6 @@ ${EndIf}
 # 已启用防删保护时，覆盖安装必须先解锁，否则连旧文件都删不掉
 ReadRegStr $2 HKLM "SOFTWARE\VigilGuard" "Hash"
 ${If} $2 != ""
-	StrCpy $GuardInstalled "1"
 	${GetParameters} $R3
 	${GetOptions} $R3 "/Unlock=" $R4
 	${If} $R4 == ""
