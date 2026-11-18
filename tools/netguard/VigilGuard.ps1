@@ -279,7 +279,7 @@ if (Test-Path '$daemon') { & '$daemon' -Once }
     $t1 = New-ScheduledTaskTrigger -AtStartup
     $t2 = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(2) `
         -RepetitionInterval (New-TimeSpan -Minutes 2) `
-        -RepetitionDuration ([TimeSpan]::MaxValue)
+        -RepetitionDuration ([TimeSpan]::FromDays(3650))
     $pr = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
     $st = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries `
         -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances IgnoreNew
