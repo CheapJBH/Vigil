@@ -234,27 +234,31 @@ jobs:
           & $cli config set Authentication/Method KeyFileAuthentication 2>&1 | Out-Host
           if ($LASTEXITCODE -ne 0) { Write-Host "config set exited with $LASTEXITCODE" }
           $global:LASTEXITCODE = 0
-          $configPath = 'C:\ProgramData\Vigil\Config.json'
+          $configPath = 'C:\ProgramData\Vigil\SystemConfig.json'
           if (Test-Path $configPath) {
             Select-String -Path $configPath -Pattern 'Method' -Context 0,1 | Out-Host
           }
 
           # --- 模拟教室：同一个 runner 上跑学生端服务，暴露 9 台内网机位 ---
           Write-Host '=== prepare simulated classroom ==='
+          & $cli config set Network/LocalConnectOnly false 2>&1 | Out-Host
+          $global:LASTEXITCODE = 0
           Restart-Service VigilService -ErrorAction SilentlyContinue
+          Start-Sleep -Seconds 5
           $serverPort = 0
-          for ($i = 0; $i -lt 15; $i++) {
-            Start-Sleep -Seconds 1
-            $svrPids = @((Get-Process vigil-server -ErrorAction SilentlyContinue).Id)
-            if ($svrPids.Count -gt 0) {
-              $conn = Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
-                      Where-Object { $svrPids -contains $_.OwningProcess -and $_.LocalPort -ge 11100 -and $_.LocalPort -lt 11200 }
-              if ($conn) { $serverPort = ($conn | Select-Object -First 1).LocalPort; break }
+          for ($i = 0; $i -lt 25; $i++) {
+            $svr = @(Get-Process vigil-server -ErrorAction SilentlyContinue)
+            if ($svr.Count -gt 0) {
+              $candidate = 11100 + $svr[0].SessionId
+              $hit = netstat -ano | Select-String ":$candidate\s" | Select-String 'LISTENING'
+              if ($hit) { $serverPort = $candidate; break }
             }
+            Start-Sleep -Seconds 1
           }
-          if ($serverPort -eq 0) { Write-Host 'WARNING: server port not detected, falling back to 11100'; $serverPort = 11100 }
+          if ($serverPort -eq 0) { throw 'Vigil server port not detected (expected 11100+sessionId to listen)' }
           Write-Host "Vigil server port = $serverPort"
           Get-Process vigil-server -ErrorAction SilentlyContinue | Select-Object Id, SessionId | Format-Table
+          if (-not (Test-Path $configPath)) { throw "config file missing: $configPath" }
 
           $cfg = (Get-Content $configPath -Raw) | ConvertFrom-Json
           if (-not $cfg.PSObject.Properties['NetworkObjectDirectory']) {
