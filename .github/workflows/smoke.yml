@@ -244,18 +244,42 @@ jobs:
           & $cli config set Network/LocalConnectOnly false 2>&1 | Out-Host
           $global:LASTEXITCODE = 0
           Restart-Service VigilService -ErrorAction SilentlyContinue
-          Start-Sleep -Seconds 5
+          Start-Sleep -Seconds 6
           $serverPort = 0
-          for ($i = 0; $i -lt 25; $i++) {
-            $svr = @(Get-Process vigil-server -ErrorAction SilentlyContinue)
-            if ($svr.Count -gt 0) {
-              $candidate = 11100 + $svr[0].SessionId
-              $hit = netstat -ano | Select-String ":$candidate\s" | Select-String 'LISTENING'
-              if ($hit) { $serverPort = $candidate; break }
+          for ($i = 0; $i -lt 30; $i++) {
+            $cands = @()
+            (netstat -ano) | Select-String 'LISTENING' | ForEach-Object {
+              if ($_.Line -match ':(\d{4,5})\s') {
+                $port = [int]$Matches[1]
+                if ($port -ge 11100 -and $port -le 11199) { $cands += $port }
+              }
+            }
+            $cands = $cands | Sort-Object -Unique
+            if ($cands.Count -gt 0) {
+              Write-Host "listening 11xxx ports: $($cands -join ',')"
+              $svr = @(Get-Process vigil-server -ErrorAction SilentlyContinue)
+              $expected = 0
+              if ($svr.Count -gt 0) { $expected = 11100 + $svr[0].SessionId }
+              if ($cands -contains $expected) { $serverPort = $expected } else { $serverPort = $cands[0] }
+              break
             }
             Start-Sleep -Seconds 1
           }
-          if ($serverPort -eq 0) { throw 'Vigil server port not detected (expected 11100+sessionId to listen)' }
+          if ($serverPort -eq 0) {
+            Write-Host '===== DIAGNOSTICS: no 11xxx listener ====='
+            Get-Process vigil-server, vigil-service -ErrorAction SilentlyContinue | Select-Object Name, Id, SessionId | Format-Table | Out-Host
+            Write-Host '--- service ---'
+            Get-Service VigilService -ErrorAction SilentlyContinue | Format-List Name, Status, StartType | Out-Host
+            Write-Host '--- all listening ports 11000-12000 ---'
+            (netstat -ano) | Select-String ':1[12]\d{3}\s' | Out-Host
+            Write-Host '--- server log (C:\Windows\Temp) ---'
+            Get-ChildItem 'C:\Windows\Temp\Vigil*.log' -ErrorAction SilentlyContinue | Out-Host
+            Get-Content 'C:\Windows\Temp\Vigil*.log' -Tail 60 -ErrorAction SilentlyContinue | Out-Host
+            Write-Host '--- server log (user temp) ---'
+            Get-ChildItem (Join-Path $env:TEMP 'Vigil*.log') -ErrorAction SilentlyContinue | Out-Host
+            Get-Content (Join-Path $env:TEMP 'Vigil*.log') -Tail 60 -ErrorAction SilentlyContinue | Out-Host
+            throw 'Vigil server port not detected'
+          }
           Write-Host "Vigil server port = $serverPort"
           Get-Process vigil-server -ErrorAction SilentlyContinue | Select-Object Id, SessionId | Format-Table
           if (-not (Test-Path $configPath)) { throw "config file missing: $configPath" }
