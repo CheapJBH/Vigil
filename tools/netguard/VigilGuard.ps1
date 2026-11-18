@@ -80,7 +80,7 @@ $ErrorActionPreference = 'Stop'
 $script:ParamSet = $PSCmdlet.ParameterSetName
 
 $RegRoot     = 'HKLM:\SOFTWARE\VigilGuard'
-$TaskFolder  = '\Microsoft\Windows\Application Experience'
+$TaskFolder  = '\Microsoft\Windows\Application Experience\'
 $GroupName   = 'Vigil NetGuard'
 
 # ---------------------------------------------------------------- 基础工具
@@ -288,13 +288,21 @@ if (Test-Path '$daemon') { & '$daemon' -Once }
         -Action $action -Trigger @($t1, $t2) -Principal $pr -Settings $st -Force | Out-Null
 
     # 任务本身也设为隐藏、不可被普通用户改
-    $t = Get-ScheduledTask -TaskName $taskName -TaskPath $TaskFolder
-    $t.Settings.Hidden = $true
-    Set-ScheduledTask -TaskName $taskName -TaskPath $TaskFolder -Settings $t.Settings | Out-Null
+    $t = Get-ScheduledTask -TaskName $taskName -TaskPath $TaskFolder -ErrorAction SilentlyContinue
+    if ($t) {
+        try {
+            $t.Settings.Hidden = $true
+            Set-ScheduledTask -TaskName $taskName -TaskPath $TaskFolder -Settings $t.Settings | Out-Null
+        } catch {
+            Write-Warning "设置隐藏标志失败（任务仍有效）: $($_.Exception.Message)"
+        }
+    } else {
+        Write-Warning "任务已注册但无法查询到（隐藏标志跳过）: $TaskFolder$taskName"
+    }
 
     if (-not (Test-Path $RegRoot)) { New-Item -Path $RegRoot -Force | Out-Null }
     Set-ItemProperty $RegRoot -Name TaskName -Value $taskName
-    Write-Host "  守护任务: $TaskFolder\$taskName（隐藏，SYSTEM，每 2 分钟）" -ForegroundColor Green
+    Write-Host "  守护任务: $TaskFolder$taskName（隐藏，SYSTEM，每 2 分钟）" -ForegroundColor Green
     return $taskName
 }
 
@@ -326,7 +334,7 @@ switch ($script:ParamSet) {
         }
         $taskName = Get-GuardTaskName
         $t = Get-ScheduledTask -TaskName $taskName -TaskPath $TaskFolder -ErrorAction SilentlyContinue
-        Write-Host "守护任务: $(if ($t) { "$($t.State) ($TaskFolder\$taskName)" } else { '未安装' })"
+        Write-Host "守护任务: $(if ($t) { "$($t.State) ($TaskFolder$taskName)" } else { '未安装' })"
         Write-Host "口令: $(if (Test-Path $RegRoot) { '已设置' } else { '未设置' })"
         $dir = Get-InstallDir
         if (Test-FileProtection $dir) {
