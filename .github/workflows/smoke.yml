@@ -106,6 +106,56 @@ jobs:
           & $cli config get UI/Language
           Write-Host "exit=$LASTEXITCODE"
 
+      - name: Verify anti-delete protection
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $guard = 'C:\Program Files\Vigil\netguard\VigilGuard.ps1'
+          $dir   = 'C:\Program Files\Vigil'
+          if (-not (Test-Path $guard)) { throw 'VigilGuard.ps1 missing' }
+
+          Write-Host '--- install guard (teacher build has no service, file protection only) ---'
+          & $guard -Install -Password 'CiTest2026' | Out-Host
+          $global:LASTEXITCODE = 0
+
+          $deny = (Get-Acl $dir).Access | Where-Object {
+            $_.AccessControlType -eq 'Deny' -and
+            (($_.FileSystemRights -band [Security.AccessControl.FileSystemRights]::Delete) -ne 0)
+          }
+          if (-not $deny) { throw 'no Deny Delete ACE on install dir' }
+          Write-Host "deny ACE: $($deny.IdentityReference) $($deny.FileSystemRights)"
+
+          $probe = Join-Path $dir 'probe-delete-me.txt'
+          Set-Content -LiteralPath $probe -Value 'x' -Encoding ASCII
+          $blocked = $false
+          try {
+            Remove-Item -LiteralPath $probe -Force -ErrorAction Stop
+          } catch {
+            $blocked = $true
+            Write-Host "delete blocked as expected: $($_.Exception.Message)"
+          }
+          if (-not $blocked) { throw 'file deletion was NOT blocked' }
+
+          Write-Host '--- wrong password must be rejected ---'
+          & $guard -Release -Password 'wrong-password' | Out-Host
+          if ($LASTEXITCODE -eq 0) { throw 'wrong password was accepted' }
+          Write-Host "wrong password rejected, exit=$LASTEXITCODE"
+          $global:LASTEXITCODE = 0
+          if (-not (Test-Path $probe)) { throw 'probe disappeared even though release failed' }
+
+          Write-Host '--- correct password releases protection ---'
+          & $guard -Release -Password 'CiTest2026' | Out-Host
+          $global:LASTEXITCODE = 0
+
+          Remove-Item -LiteralPath $probe -Force -ErrorAction Stop
+          if (Test-Path $probe) { throw 'probe still present after release' }
+          $stillDenied = (Get-Acl $dir).Access | Where-Object {
+            $_.AccessControlType -eq 'Deny' -and
+            (($_.FileSystemRights -band [Security.AccessControl.FileSystemRights]::Delete) -ne 0)
+          }
+          if ($stillDenied) { throw 'Deny Delete ACE still present after release' }
+          Write-Host 'anti-delete protection OK'
+
       - name: Launch GUIs and capture screenshots
         shell: pwsh
         run: |
