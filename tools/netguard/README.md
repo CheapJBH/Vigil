@@ -51,13 +51,14 @@ Minecraft、QQ、游戏客户端这类私有二进制协议。因此唯一可靠
 
 `VigilGuard.ps1` 负责让上述管控**关不掉、关不干净、重启后自动回来**。
 
-## 三层防护（全部系统原生，无需驱动）
+## 四层防护（全部系统原生，无需驱动）
 
 | 层 | 机制 | 效果 |
 |---|---|---|
 | 1 | 服务 SCM 安全描述符（SDDL）移除 `SERVICE_STOP` / `SERVICE_CHANGE_CONFIG` | `net stop`、`sc stop`、服务管理器“停止”→ 拒绝访问 |
 | 2 | `sc failure` 自动恢复（`restart/1000` × 3）+ `failureflag 1` | 直接 `taskkill` 掉进程，SCM 1 秒内拉起 |
 | 3 | 隐藏计划任务（SYSTEM，`\Microsoft\Windows\Application Experience\` 下，名称由 MachineGuid 派生） | 每 2 分钟校验：服务没启动就启动、启动类型被改就改回、防火墙规则缺了就补 |
+| 4 | 程序目录 DACL 追加 `Deny Delete`（`icacls /deny *S-1-5-32-544:(OI)(CI)(DE,DC)`） | 即使本地管理员也删不掉 `C:\Program Files\Vigil` 里的文件；程序仍可正常读取执行 |
 
 ## 开机自启
 
@@ -80,6 +81,20 @@ Minecraft、QQ、游戏客户端这类私有二进制协议。因此唯一可靠
 # 查看状态
 .\VigilGuard.ps1 -Status
 ```
+
+`-Release` 会一次做完四件事：解除文件 `Deny Delete`、删除守护计划任务、恢复服务 SDDL、
+在注册表写下 `Released=1`。策略代理下次同步时看到这个标记会自动重新加固，所以临时解锁
+不会永久失效。
+
+## 卸载与覆盖安装
+
+已加固的机器，安装包会拦住删除动作：
+
+- 卸载向导弹出口令输入框，口令正确才继续；错误直接取消
+- 静默卸载：`uninstall.exe /S /Unlock=<口令>`
+- 覆盖安装：`vigil-student-*.exe /S /Unlock=<口令>`
+
+没有口令时，只能进 WinPE 或取得所有权后手工改 DACL 绕过。
 
 口令以 PBKDF2-SHA256（12 万次迭代 + 16 字节随机盐）存放于
 `HKLM\SOFTWARE\VigilGuard`，明文不落盘。
