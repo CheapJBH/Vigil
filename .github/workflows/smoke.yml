@@ -220,10 +220,18 @@ jobs:
           # 1) 登录框截图（默认 Logon 认证）
           Write-Host '=== master: login dialog ==='
           $p = Start-Process -FilePath $masterExe -PassThru
-          $h = Wait-AppWindow $p
-          Start-Sleep -Seconds 4
-          $p.Refresh()
-          if ($p.MainWindowHandle -ne [IntPtr]::Zero) { $h = $p.MainWindowHandle }
+          $h = [IntPtr]::Zero
+          # splash 也是顶层窗口且尺寸接近登录框，必须按标题判定，否则会截到 splash
+          for ($i = 0; $i -lt 60; $i++) {
+            Start-Sleep -Milliseconds 500
+            $p.Refresh()
+            if ($p.HasExited) { break }
+            if ($p.MainWindowHandle -ne [IntPtr]::Zero) {
+              if ($p.MainWindowTitle -match '登录') { $h = $p.MainWindowHandle; break }
+              if ($h -eq [IntPtr]::Zero) { $h = $p.MainWindowHandle }
+            }
+          }
+          Start-Sleep -Milliseconds 800
           CaptureWindow $h (Join-Path $PWD 'shots\master-login.png')
           try { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue } catch {}
           Start-Sleep -Seconds 3
