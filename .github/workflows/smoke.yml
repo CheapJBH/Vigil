@@ -277,13 +277,21 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'failed to set NetworkObjectDirectory/Plugin' }
           $global:LASTEXITCODE = 0
 
-          $classroom = @()
+          # BuiltinDirectory::update() 只加载 Type=2(Location) 的分组，
+          # 电脑必须用 ParentUid 挂到分组下，否则会被完全忽略
+          $locationUid = [guid]::NewGuid().ToString()
+          $classroom = @([ordered]@{
+            Type = 2
+            Uid  = $locationUid
+            Name = '教室'
+          })
           for ($i = 1; $i -le 9; $i++) {
             $classroom += [ordered]@{
               Type        = 3
               Uid         = [guid]::NewGuid().ToString()
               Name        = ('PC-{0:D2}' -f $i)
               HostAddress = "127.0.0.$($i + 1):$serverPort"
+              ParentUid   = $locationUid
             }
           }
           $json = ConvertTo-Json -InputObject @($classroom) -Depth 5 -Compress
