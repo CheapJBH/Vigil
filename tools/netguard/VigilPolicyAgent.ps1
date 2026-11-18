@@ -85,14 +85,21 @@ function Invoke-Sync {
     # 教师端统一下发的保护口令
     if ($obj.guard -and $obj.guard.hash -and $obj.guard.salt) {
         New-Item -Path $RegRoot -Force | Out-Null
-        $cur = (Get-ItemProperty $RegRoot -ErrorAction SilentlyContinue).Hash
-        if ($cur -ne $obj.guard.hash) {
+        $props    = Get-ItemProperty $RegRoot -ErrorAction SilentlyContinue
+        $cur      = $props.Hash
+        $released = $props.Released
+        # 口令变化，或本机被 -Release 解锁过（覆盖安装/手动解锁），都要重新加固
+        if ($cur -ne $obj.guard.hash -or $released -eq 1) {
             Set-ItemProperty $RegRoot -Name Salt       -Value $obj.guard.salt
             Set-ItemProperty $RegRoot -Name Hash       -Value $obj.guard.hash
             Set-ItemProperty $RegRoot -Name Iterations -Value ([int]$obj.guard.iterations)
-            Write-Audit '保护口令已由教师端更新'
+            if ($cur -ne $obj.guard.hash) { Write-Audit '保护口令已由教师端更新' }
+            else { Write-Audit '检测到本地解锁，已重新加固' }
             $guard = Join-Path $PSScriptRoot 'VigilGuard.ps1'
-            if (Test-Path $guard) { & $guard -Harden | Out-Null }
+            if (Test-Path $guard) {
+                & $guard -Harden | Out-Null
+                Remove-ItemProperty $RegRoot -Name Released -ErrorAction SilentlyContinue
+            }
         }
     }
 
