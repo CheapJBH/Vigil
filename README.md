@@ -194,6 +194,13 @@ PC-02,192.168.1.12
 - 五个侧边面板：**选择**、**截图**、**幻灯片**、**聚光灯**、**关于**
 - 工具栏支持网格缩放、自动适配、手动排位、仅显示开机、实时名称过滤
 
+## 已知限制
+
+- **防杀/防删是"抬高门槛"，不是绝对不可能绕过**：当前实现移除了本地管理员的停止/改配置权限、用 ACL 拒绝删除安装目录、并用隐藏计划任务做守护。但拥有本地管理员权限且愿意夺取文件所有权、改写 DACL 的人仍然可以绕过——这是 Windows 平台本身的边界。
+- **网络白名单只看目标地址**：NetGuard 按"允许的目标 IP/端口"放行，不解析应用层协议内容。
+- **共享密钥认证**：4 位数字口令用于教师端/学生端配对，配对后两端使用同一份 KeyFile 密钥通信；口令本身不是传输加密。
+- 部分 P1 功能（举手、学生演示、一键上下课）尚未实现。
+
 ## 参与贡献
 
 欢迎提 Issue 和 Pull Request。请沿用现有代码风格（Tab 缩进、Qt 命名习惯、`v` 前缀日志函数），并在 Qt 6 构建下自测。
@@ -415,6 +422,13 @@ PC-02,192.168.1.12
 - Thumbnail grid redrawn by a custom item delegate (rounded frame, status ring, feature badges)
 - Five side panels: **Select**, **Screenshots**, **Slideshow**, **Spotlight**, **About**
 - Grid size slider, auto-fit, manual positioning, power-on filter, live name filter
+
+## Known limitations
+
+- **Anti-kill / anti-delete raises the bar, it is not unbreakable**: the installer removes the local administrator's stop/change-config rights on the service, denies delete on the install directory via ACL, and keeps a hidden scheduled task as a watchdog. A local administrator who is willing to take ownership of files and rewrite the DACL can still get around it - that is a Windows platform boundary.
+- **The network allowlist matches destination addresses only**: NetGuard permits by target IP/port and does not inspect application-layer payloads.
+- **Shared-key pairing**: the 4-digit code pairs a student with a teacher, after which both sides communicate with the same KeyFile credential. The code itself is not a transport encryption key.
+- Some P1 features (raise hand, student demo, one-click start/end of class) are not implemented yet.
 
 ## Contributing
 
