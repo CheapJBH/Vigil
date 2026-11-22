@@ -64,18 +64,25 @@ jobs:
         run: |
           $ps1 = Join-Path $PWD 'tools\classroom-setup\teacher\VigilPairServer.ps1'
           $log = Join-Path $PWD 'pair.log'
-          Start-Process powershell -ArgumentList @(
+          if (Test-Path $log) { Remove-Item $log -Force }
+          Write-Host "server script: $ps1 (exists=$(Test-Path $ps1))"
+          $proc = Start-Process powershell -ArgumentList @(
             '-NoProfile','-ExecutionPolicy','Bypass','-File',$ps1,
             '-Code','1234','-AutoAccept','-LogFile',$log
-          ) -WindowStyle Hidden
-          Start-Sleep -Seconds 4
+          ) -WindowStyle Hidden -PassThru
+          Start-Sleep -Seconds 5
+          Write-Host "pair server pid=$($proc.Id) exited=$($proc.HasExited)"
+          Write-Host "--- pair.log ---"
+          if (Test-Path $log) { Get-Content $log } else { Write-Host "(pair.log not created)" }
+          Write-Host "--- listening ports ---"
+          Get-NetTCPConnection -LocalPort 11101 -ErrorAction SilentlyContinue |
+            Format-Table LocalAddress, LocalPort, State, OwningProcess | Out-String | Write-Host
           "--- /ping ---"
           (Invoke-WebRequest 'http://127.0.0.1:11101/ping' -UseBasicParsing).Content
           "--- /pair?auto=1 (should return PEM) ---"
           $pem = (Invoke-WebRequest 'http://127.0.0.1:11101/pair?auto=1&name=e2e-runner' -UseBasicParsing).Content
           if ($pem -notmatch 'BEGIN PUBLIC KEY') { throw "/pair?auto=1 did not return a public key" }
           Write-Host "got PEM: $($pem.Length) chars"
-          "--- /pair?code=9999 without AutoAccept would fail; here auto mode wins ---"
 
       - name: Run student silent pairing
         shell: pwsh
