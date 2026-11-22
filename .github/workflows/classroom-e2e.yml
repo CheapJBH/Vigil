@@ -30,10 +30,27 @@ jobs:
           $p = Start-Process -FilePath .\teacher.exe -ArgumentList '/S' -Wait -PassThru
           Write-Host "installer exit: $($p.ExitCode)"
           Start-Sleep -Seconds 8
-          Get-Service -Name VigilService | Format-List Name, Status, StartType
-          $cli = 'C:\Program Files\Vigil\vigil-cli.exe'
-          if (-not (Test-Path $cli)) { throw "vigil-cli.exe missing" }
-          & $cli --version
+          Write-Host "--- install dir ---"
+          Get-ChildItem 'C:\Program Files\Vigil' -ErrorAction SilentlyContinue |
+            Select-Object Name, Length | Format-Table -AutoSize | Out-String | Write-Host
+          Write-Host "--- services matching vigil ---"
+          Get-Service | Where-Object { $_.Name -like '*igil*' } | Format-Table Name, Status | Out-String | Write-Host
+          Write-Host "--- sc query VigilService ---"
+          sc.exe query VigilService 2>&1 | Out-String | Write-Host
+
+          $wcli = 'C:\Program Files\Vigil\vigil-wcli.exe'
+          if (-not (Test-Path $wcli)) { throw "vigil-wcli.exe missing" }
+          Write-Host "--- wcli --version ---"
+          & $wcli --version 2>&1 | Out-String | Write-Host
+          Write-Host "--- wcli service register (manual) ---"
+          & $wcli service register 2>&1 | Out-String | Write-Host
+          Write-Host "register exit: $LASTEXITCODE"
+          Start-Sleep -Seconds 3
+          sc.exe query VigilService 2>&1 | Out-String | Write-Host
+
+          $svc = Get-Service -Name VigilService -ErrorAction SilentlyContinue
+          if (-not $svc) { throw "VigilService still missing after manual register" }
+          $svc | Format-List Name, Status, StartType
 
       - name: Create classroom key
         shell: pwsh
