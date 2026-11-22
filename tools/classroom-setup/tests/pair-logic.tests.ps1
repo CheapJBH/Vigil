@@ -1,4 +1,4 @@
-# 配对判定逻辑测试（与 VigilPairServer.ps1 中 /pair 分支保持同一表达式）
+﻿# 配对判定逻辑测试（与 VigilPairServer.ps1 中 /pair 分支保持同一表达式）
 # 运行：pwsh -NoProfile -File tests/pair-logic.tests.ps1
 
 $ErrorActionPreference = 'Stop'

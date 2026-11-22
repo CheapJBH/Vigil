@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Vigil NetGuard 守护进程：定时刷新域名 IP，并补回被删除的规则。
 
