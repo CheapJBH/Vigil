@@ -84,6 +84,30 @@ jobs:
           if ($pem -notmatch 'BEGIN PUBLIC KEY') { throw "/pair?auto=1 did not return a public key" }
           Write-Host "got PEM: $($pem.Length) chars"
 
+      - name: Diagnose key import path
+        shell: pwsh
+        run: |
+          $cli = 'C:\Program Files\Vigil\vigil-cli.exe'
+          Write-Host "--- authkeys list (before) ---"
+          & $cli authkeys list 2>&1 | Out-String | Write-Host
+          Write-Host "--- delete classroom/public ---"
+          & $cli authkeys delete classroom/public 2>&1 | Out-String | Write-Host
+          Write-Host "delete exit=$LASTEXITCODE"
+          Write-Host "--- list after delete ---"
+          & $cli authkeys list 2>&1 | Out-String | Write-Host
+          Write-Host "--- where are keys stored ---"
+          Get-ChildItem 'C:\ProgramData\Vigil' -Recurse -Filter '*.pem' -ErrorAction SilentlyContinue |
+            Select-Object FullName, Length | Format-Table -AutoSize | Out-String | Write-Host
+          Get-ChildItem "$env:ProgramData\Vigil" -Directory -ErrorAction SilentlyContinue |
+            Select-Object FullName | Out-String | Write-Host
+          Write-Host "--- try import via temp pem ---"
+          $pem = (Invoke-WebRequest 'http://127.0.0.1:11101/pair?auto=1&name=diag' -UseBasicParsing).Content
+          $tmp = Join-Path $env:TEMP 'diag-pub.pem'
+          Set-Content -Path $tmp -Value $pem -Encoding ASCII -NoNewline
+          & $cli authkeys import 'classroom/public' $tmp 2>&1 | Out-String | Write-Host
+          Write-Host "import exit=$LASTEXITCODE"
+          & $cli authkeys list 2>&1 | Out-String | Write-Host
+
       - name: Run student silent pairing
         shell: pwsh
         run: |
