@@ -16,18 +16,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download teacher installer
+      - name: Download student installer
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $url = 'https://github.com/CheapJBH/Vigil/releases/download/v4.11.4/vigil-teacher-4.11.4.0-win64-setup.exe'
-          Invoke-WebRequest -Uri $url -OutFile teacher.exe -UseBasicParsing
-          Write-Host "downloaded: $((Get-Item teacher.exe).Length) bytes"
+          # 学生端包才包含 vigil-server + vigil-service（teacher 包按设计不含 service）
+          $url = 'https://github.com/CheapJBH/Vigil/releases/download/v4.11.4/vigil-student-4.11.4.0-win64-setup.exe'
+          Invoke-WebRequest -Uri $url -OutFile student.exe -UseBasicParsing
+          Write-Host "downloaded: $((Get-Item student.exe).Length) bytes"
 
-      - name: Install teacher silently
+      - name: Install student silently
         shell: pwsh
         run: |
-          $p = Start-Process -FilePath .\teacher.exe -ArgumentList '/S' -Wait -PassThru
+          $p = Start-Process -FilePath .\student.exe -ArgumentList '/S' -Wait -PassThru
           Write-Host "installer exit: $($p.ExitCode)"
           Start-Sleep -Seconds 8
           Write-Host "--- install dir ---"
@@ -42,14 +43,13 @@ jobs:
           if (-not (Test-Path $wcli)) { throw "vigil-wcli.exe missing" }
           Write-Host "--- wcli --version ---"
           & $wcli --version 2>&1 | Out-String | Write-Host
-          Write-Host "--- wcli service register (manual) ---"
-          & $wcli service register 2>&1 | Out-String | Write-Host
-          Write-Host "register exit: $LASTEXITCODE"
-          Start-Sleep -Seconds 3
-          sc.exe query VigilService 2>&1 | Out-String | Write-Host
-
-          $svc = Get-Service -Name VigilService -ErrorAction SilentlyContinue
-          if (-not $svc) { throw "VigilService still missing after manual register" }
+          $svc = $null
+          for ($i = 0; $i -lt 20; $i++) {
+            Start-Sleep -Milliseconds 500
+            $svc = Get-Service -Name VigilService -ErrorAction SilentlyContinue
+            if ($svc) { break }
+          }
+          if (-not $svc) { throw "VigilService missing after install" }
           $svc | Format-List Name, Status, StartType
 
       - name: Create classroom key
