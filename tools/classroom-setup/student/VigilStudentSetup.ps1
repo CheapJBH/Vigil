@@ -315,7 +315,7 @@ if ($Silent) {
 [System.Windows.Forms.Application]::EnableVisualStyles()
 
 $form = New-Object System.Windows.Forms.Form
-$form.Text = 'Vigil 学生端 · 绑定课堂'
+$form.Text = 'Vigil 学生端 · 加入课堂'
 $form.ClientSize = New-Object System.Drawing.Size(460, 424)
 $form.StartPosition = 'CenterScreen'
 $form.FormBorderStyle = 'FixedSingle'
@@ -324,7 +324,7 @@ $form.BackColor = [System.Drawing.Color]::FromArgb(250, 251, 253)
 $form.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 9)
 
 $title = New-Object System.Windows.Forms.Label
-$title.Text = '输入课堂口令'
+$title.Text = '加入课堂'
 $title.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 15, [System.Drawing.FontStyle]::Bold)
 $title.ForeColor = [System.Drawing.Color]::FromArgb(20, 24, 35)
 $title.AutoSize = $true
