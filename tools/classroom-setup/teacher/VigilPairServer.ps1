@@ -11,17 +11,19 @@
       同一来源连续输错 5 次，锁定 5 分钟。
 
     参数：
-      -Code     当前有效的 4 位口令
-      -Port     监听端口，默认 11101
-      -KeyName  密钥名称，默认 classroom
-      -LogFile  日志文件路径（GUI 轮询展示）
+      -Code       当前有效的 4 位口令
+      -Port       监听端口，默认 11101
+      -KeyName    密钥名称，默认 classroom
+      -LogFile    日志文件路径（GUI 轮询展示）
+      -AutoAccept 免口令模式：同网段学生端可直接取走课堂公钥（默认关闭）
 #>
 
 param(
     [Parameter(Mandatory = $true)][string]$Code,
     [int]$Port = 11101,
     [string]$KeyName = 'classroom',
-    [string]$LogFile = (Join-Path $env:TEMP 'vigil-pair.log')
+    [string]$LogFile = (Join-Path $env:TEMP 'vigil-pair.log'),
+    [switch]$AutoAccept
 )
 
 $ErrorActionPreference = 'Stop'
@@ -151,7 +153,11 @@ while ($running) {
         }
         elseif ($req.HttpMethod -eq 'GET' -and $req.Url.AbsolutePath -eq '/pair') {
             $given = [string]$req.QueryString['code']
-            if ($given -and $given -eq $Code) {
+            $allowByCode = ($given -and $given -eq $Code)
+            # 免口令模式：学生端带 auto=1，或不带口令直接来取
+            $allowByAuto = $AutoAccept -and (([string]$req.QueryString['auto'] -eq '1') -or (-not $given))
+            if ($allowByCode -or $allowByAuto) {
+                if ($allowByAuto -and -not $allowByCode) { Write-Log "免口令配对：$remote" }
                 $status = 200
                 $body = $publicKey
                 $failTable.Remove($remote)

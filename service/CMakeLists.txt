@@ -2,6 +2,7 @@ include(BuildVigilApplication)
 
 build_vigil_application(vigil-service
 	NAME Service
+	WINDOWS_ICON data/vigil-service.ico
 	SOURCES
 	src/main.cpp)
 

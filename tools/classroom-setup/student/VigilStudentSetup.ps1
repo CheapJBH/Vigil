@@ -14,20 +14,38 @@
 
 #Requires -Version 5.1
 
+param(
+    # 静默模式：不弹界面，直接扫描并免口令配对（供开机任务调用）
+    [switch]$Silent,
+    # 注册开机自动配对任务后退出
+    [switch]$InstallAutoStart,
+    # 手动指定教师机 IP（可选）
+    [string]$TeacherIp = '',
+    # 静默模式最大重试次数
+    [int]$Retry = 6
+)
+
 # ---------------------------------------------------------------- 自提升
 
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
 $principal = New-Object Security.Principal.WindowsPrincipal($identity)
 if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     try {
-        Start-Process -FilePath 'powershell.exe' -Verb RunAs -ArgumentList @(
-            '-NoProfile', '-ExecutionPolicy', 'Bypass',
-            '-File', "`"$PSCommandPath`""
-        )
+        $argList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"")
+        if ($Silent) { $argList += '-Silent' }
+        if ($InstallAutoStart) { $argList += '-InstallAutoStart' }
+        if ($TeacherIp) { $argList += @('-TeacherIp', $TeacherIp) }
+        if ($Retry -ne 6) { $argList += @('-Retry', $Retry) }
+        Start-Process -FilePath 'powershell.exe' -Verb RunAs -ArgumentList $argList
     } catch {
-        [System.Windows.Forms.MessageBox]::Show(
-            '需要管理员权限才能写入认证密钥，请右键「以管理员身份运行」。',
-            'Vigil 学生端', 'OK', 'Warning') | Out-Null
+        if (-not $Silent) {
+            try { Add-Type -AssemblyName System.Windows.Forms } catch {}
+            try {
+                [System.Windows.Forms.MessageBox]::Show(
+                    '需要管理员权限才能写入认证密钥，请右键「以管理员身份运行」。',
+                    'Vigil 学生端', 'OK', 'Warning') | Out-Null
+            } catch {}
+        }
     }
     exit
 }
@@ -114,10 +132,14 @@ function Test-PortBatch {
 }
 
 function Invoke-PairRequest {
-    param([string]$Ip, [string]$Code)
+    param([string]$Ip, [string]$Code, [switch]$Auto)
 
     $hostName = [System.Uri]::EscapeDataString([string]$env:COMPUTERNAME)
-    $url = "http://${Ip}:$PairPort/pair?code=$Code&name=$hostName"
+    if ($Auto) {
+        $url = "http://${Ip}:$PairPort/pair?auto=1&name=$hostName"
+    } else {
+        $url = "http://${Ip}:$PairPort/pair?code=$Code&name=$hostName"
+    }
     try {
         $resp = Invoke-WebRequest -Uri $url -TimeoutSec 4 -UseBasicParsing -ErrorAction Stop
         $body = $resp.Content
@@ -172,13 +194,102 @@ function Restart-VigilService {
     }
 }
 
+# ---------------------------------------------------------------- 静默 / 开机自启
+
+function Write-SilentLog {
+    param([string]$Text)
+    $dir = Join-Path $env:ProgramData 'Vigil'
+    try {
+        if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+        $line = '[{0:yyyy-MM-dd HH:mm:ss}] {1}' -f (Get-Date), $Text
+        Add-Content -Path (Join-Path $dir 'auto-pair.log') -Value $line -Encoding UTF8
+    } catch {}
+}
+
+function Find-Teacher {
+    param([string]$PreferredIp)
+    if ($PreferredIp) {
+        if (Test-TeacherAlive -Ip $PreferredIp) { return @($PreferredIp) }
+        return @()
+    }
+    $targets = Get-ScanTargets
+    $open = Test-PortBatch -Addresses $targets -Port $PairPort -TimeoutMs 400
+    $alive = @()
+    foreach ($ip in $open) { if (Test-TeacherAlive -Ip $ip) { $alive += $ip } }
+    return $alive
+}
+
+function Invoke-SilentPairOnce {
+    param([string]$PreferredIp)
+    $teachers = Find-Teacher -PreferredIp $PreferredIp
+    if ($teachers.Count -eq 0) { return $false }
+
+    foreach ($ip in $teachers) {
+        $pem = Invoke-PairRequest -Ip $ip -Auto
+        if (-not $pem) { continue }
+        $null = Import-PublicKey -Pem $pem
+        $null = & $Cli config set 'Authentication/Method' 'KeyFile' 2>&1
+        if ($LASTEXITCODE -ne 0) { Write-SilentLog '警告：认证方式设置失败' }
+        $ok = Restart-VigilService
+        Write-SilentLog ('配对成功：教师机 {0}，服务重启 {1}' -f $ip, $(if ($ok) { '成功' } else { '失败' }))
+        try {
+            @{ Teacher = $ip; Time = (Get-Date).ToString('s') } |
+                ConvertTo-Json | Set-Content -Path (Join-Path $env:ProgramData 'Vigil\paired.json') -Encoding UTF8
+        } catch {}
+        return $true
+    }
+    return $false
+}
+
+function Invoke-SilentPair {
+    param([string]$PreferredIp, [int]$Tries = 6)
+    for ($i = 1; $i -le $Tries; $i++) {
+        try {
+            if (Invoke-SilentPairOnce -PreferredIp $PreferredIp) { return 0 }
+        } catch {
+            Write-SilentLog ('第 {0} 次失败：{1}' -f $i, $_.Exception.Message)
+        }
+        if ($i -lt $Tries) { Start-Sleep -Seconds 10 }
+    }
+    Write-SilentLog ('{0} 次尝试均未找到教师端，退出' -f $Tries)
+    return 1
+}
+
+function Install-AutoStartTask {
+    $ps1 = $PSCommandPath
+    $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument (
+        '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{0}" -Silent' -f $ps1)
+    $trigger = New-ScheduledTaskTrigger -AtStartup
+    $trigger.Delay = 'PT30S'
+    $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+        -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 30)
+    Register-ScheduledTask -TaskName 'VigilAutoPair' -Action $action -Trigger $trigger `
+        -Principal $principal -Settings $settings -Force | Out-Null
+    Write-SilentLog '已注册开机自动配对任务 VigilAutoPair'
+}
+
+if ($InstallAutoStart) {
+    Install-AutoStartTask
+    if (-not $Silent) {
+        [System.Windows.Forms.MessageBox]::Show(
+            "已注册开机自动配对任务。`n下次开机 30 秒后，学生端会自动寻找教师端并绑定（需教师端开启免口令）。",
+            'Vigil 学生端', 'OK', 'Information') | Out-Null
+    }
+    if ($Silent) { exit 0 }
+}
+
+if ($Silent) {
+    exit (Invoke-SilentPair -PreferredIp $TeacherIp -Tries $Retry)
+}
+
 # ---------------------------------------------------------------- 界面
 
 [System.Windows.Forms.Application]::EnableVisualStyles()
 
 $form = New-Object System.Windows.Forms.Form
 $form.Text = 'Vigil 学生端 · 绑定课堂'
-$form.ClientSize = New-Object System.Drawing.Size(460, 400)
+$form.ClientSize = New-Object System.Drawing.Size(460, 424)
 $form.StartPosition = 'CenterScreen'
 $form.FormBorderStyle = 'FixedSingle'
 $form.MaximizeBox = $false
@@ -194,7 +305,7 @@ $title.Location = New-Object System.Drawing.Point(28, 22)
 $form.Controls.Add($title)
 
 $sub = New-Object System.Windows.Forms.Label
-$sub.Text = '请输入老师屏幕上显示的 4 位数字。'
+$sub.Text = '点「加入课堂」即可；口令留空时自动绑定（需老师开启免口令）。'
 $sub.ForeColor = [System.Drawing.Color]::FromArgb(100, 106, 120)
 $sub.AutoSize = $true
 $sub.Location = New-Object System.Drawing.Point(30, 60)
@@ -249,15 +360,15 @@ $status = New-Object System.Windows.Forms.Label
 $status.Text = '准备就绪'
 $status.ForeColor = [System.Drawing.Color]::FromArgb(100, 106, 120)
 $status.AutoSize = $true
-$status.Location = New-Object System.Drawing.Point(30, 168)
+$status.Location = New-Object System.Drawing.Point(30, 208)
 $form.Controls.Add($status)
 
 $logBox = New-Object System.Windows.Forms.TextBox
 $logBox.Multiline = $true
 $logBox.ReadOnly = $true
 $logBox.ScrollBars = 'Vertical'
-$logBox.Size = New-Object System.Drawing.Size(404, 150)
-$logBox.Location = New-Object System.Drawing.Point(28, 196)
+$logBox.Size = New-Object System.Drawing.Size(404, 152)
+$logBox.Location = New-Object System.Drawing.Point(28, 236)
 $logBox.BackColor = [System.Drawing.Color]::White
 $logBox.BorderStyle = 'FixedSingle'
 $logBox.Font = New-Object System.Drawing.Font('Consolas', 8.5)
@@ -275,7 +386,19 @@ function Set-Status {
     $status.ForeColor = [System.Drawing.Color]::FromArgb($R, $G, $B)
 }
 
-$btnPair = Add-Button -Text '绑定课堂' -X 28 -Y 160 -W 200 -OnClick {
+$btnAuto = Add-Button -Text '开机自动配对' -X 236 -Y 160 -W 196 -OnClick {
+    try {
+        Install-AutoStartTask
+        $logBox.AppendText("已注册开机任务 VigilAutoPair（30 秒后自动配对）。`r`n")
+        [System.Windows.Forms.MessageBox]::Show(
+            "已注册开机自动配对任务。`n下次开机 30 秒后，会自动寻找教师端并绑定（需教师端开启免口令）。",
+            'Vigil 学生端', 'OK', 'Information') | Out-Null
+    } catch {
+        [System.Windows.Forms.MessageBox]::Show("注册失败：`n$($_.Exception.Message)", 'Vigil 学生端', 'OK', 'Error') | Out-Null
+    }
+}
+
+$btnPair = Add-Button -Text '加入课堂' -X 28 -Y 160 -W 200 -OnClick {
     $btnPair.Enabled = $false
     $logBox.Clear()
 
@@ -283,7 +406,10 @@ $btnPair = Add-Button -Text '绑定课堂' -X 28 -Y 160 -W 200 -OnClick {
         if (-not $Cli) { throw '找不到 vigil-cli.exe，请重新安装 Vigil 学生端。' }
 
         $code = $codeInput.Text.Trim()
-        if ($code -notmatch '^\d{4}$') { throw '请输入 4 位数字口令。' }
+        $useAuto = ($code -eq '')          # 口令留空 = 免口令自动加入
+        if (-not $useAuto -and $code -notmatch '^\d{4}$') {
+            throw '口令应为 4 位数字；留空则自动加入（需教师端开启免口令）。'
+        }
 
         $manualIp = $ipInput.Text.Trim()
         $candidates = @()
@@ -304,15 +430,19 @@ $btnPair = Add-Button -Text '绑定课堂' -X 28 -Y 160 -W 200 -OnClick {
             if ($candidates.Count -eq 0) { throw '没有在局域网中找到教师端。请确认教师端已点「开始配对」，或手动填写教师机 IP。' }
         }
 
-        Set-Status '正在校验口令…'
+        if ($useAuto) { Set-Status '正在自动加入课堂…' } else { Set-Status '正在校验口令…' }
         $pem = $null
         $hit = $null
         foreach ($ip in $candidates) {
-            $pem = Invoke-PairRequest -Ip $ip -Code $code
+            if ($useAuto) { $pem = Invoke-PairRequest -Ip $ip -Auto }
+            else { $pem = Invoke-PairRequest -Ip $ip -Code $code }
             if ($pem) { $hit = $ip; break }
         }
-        if (-not $pem) { throw '口令不正确，或教师端口令已更换。请向老师确认。' }
-        Log "口令验证通过：$hit"
+        if (-not $pem) {
+            if ($useAuto) { throw '教师端没有开启「免口令自动加入」。请让老师勾选后重试，或向老师要 4 位口令填在左侧。' }
+            throw '口令不正确，或教师端口令已更换。请向老师确认。'
+        }
+        if ($useAuto) { Log "自动配对成功：$hit" } else { Log "口令验证通过：$hit" }
 
         Set-Status '正在写入认证密钥…'
         $null = Import-PublicKey -Pem $pem
@@ -342,7 +472,7 @@ $btnPair = Add-Button -Text '绑定课堂' -X 28 -Y 160 -W 200 -OnClick {
 $form.Add_Shown({ $codeInput.Focus() | Out-Null })
 $form.AcceptButton = $btnPair
 
-$logBox.AppendText("把老师屏幕上的 4 位数字输入左侧，然后点「绑定课堂」。`r`n")
-$logBox.AppendText("如果自动扫描失败，在右侧填写教师机 IP 再试。`r`n")
+$logBox.AppendText("直接点「加入课堂」即可自动绑定；如需口令，填左侧 4 位数字。`r`n")
+$logBox.AppendText("扫描不到时，在右侧填写教师机 IP 再试；点「开机自动配对」可注册开机任务。`r`n")
 
 [void]$form.ShowDialog()

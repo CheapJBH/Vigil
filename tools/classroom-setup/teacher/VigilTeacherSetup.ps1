@@ -103,7 +103,7 @@ function New-AccessCode {
 }
 
 function Start-PairServer {
-    param([string]$AccessCode)
+    param([string]$AccessCode, [switch]$AutoAccept)
 
     Stop-PairServer
 
@@ -117,6 +117,7 @@ function Start-PairServer {
         '-KeyName', $KeyName,
         '-LogFile', "`"$LogFile`""
     )
+    if ($AutoAccept) { $procArgs += '-AutoAccept' }
 
     $script:ServerProc = Start-Process -FilePath 'powershell.exe' `
         -ArgumentList $procArgs -WindowStyle Hidden -PassThru
@@ -200,12 +201,66 @@ $logBox = New-Object System.Windows.Forms.TextBox
 $logBox.Multiline = $true
 $logBox.ReadOnly = $true
 $logBox.ScrollBars = 'Vertical'
-$logBox.Size = New-Object System.Drawing.Size(464, 210)
-$logBox.Location = New-Object System.Drawing.Point(28, 300)
+$logBox.Size = New-Object System.Drawing.Size(464, 180)
+$logBox.Location = New-Object System.Drawing.Point(28, 330)
 $logBox.BackColor = [System.Drawing.Color]::White
 $logBox.BorderStyle = 'FixedSingle'
 $logBox.Font = New-Object System.Drawing.Font('Consolas', 8.5)
 $form.Controls.Add($logBox)
+
+$autoCheck = New-Object System.Windows.Forms.CheckBox
+$autoCheck.Text = '允许同网段学生端自动加入（免口令）'
+$autoCheck.AutoSize = $true
+$autoCheck.ForeColor = [System.Drawing.Color]::FromArgb(60, 66, 80)
+$autoCheck.Location = New-Object System.Drawing.Point(30, 292)
+$autoCheck.Checked = $true   # 默认开启：学生端点「加入课堂」即可绑定
+
+$autoStartCheck = New-Object System.Windows.Forms.CheckBox
+$autoStartCheck.Text = '开机自动启动配对服务'
+$autoStartCheck.AutoSize = $true
+$autoStartCheck.ForeColor = [System.Drawing.Color]::FromArgb(60, 66, 80)
+$autoStartCheck.Location = New-Object System.Drawing.Point(300, 292)
+
+# 读取上次选择
+try {
+    $cfgPath = Join-Path $env:ProgramData 'Vigil\pair-settings.json'
+    if (Test-Path $cfgPath) {
+        $saved = Get-Content $cfgPath -Raw | ConvertFrom-Json
+        if ($null -ne $saved.AutoAccept) { $autoCheck.Checked = [bool]$saved.AutoAccept }
+        if ($null -ne $saved.AutoStart) { $autoStartCheck.Checked = [bool]$saved.AutoStart }
+    }
+} catch {}
+$form.Controls.Add($autoCheck)
+$form.Controls.Add($autoStartCheck)
+
+function Save-PairSettings {
+    try {
+        $dir = Join-Path $env:ProgramData 'Vigil'
+        if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+        @{
+            AutoAccept = [bool]$autoCheck.Checked
+            AutoStart  = [bool]$autoStartCheck.Checked
+            Code       = if ($codeBox.Text -match '^\d{4}$') { $codeBox.Text } else { '0000' }
+        } | ConvertTo-Json | Set-Content -Path (Join-Path $dir 'pair-settings.json') -Encoding UTF8
+    } catch {}
+}
+
+function Install-TeacherAutoStart {
+    param([string]$Code)
+    $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument (
+        '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{0}" -Code {1} -Port {2} -KeyName {3} -LogFile "{4}" {5}' -f `
+        $ServerPs1, $Code, $PairPort, $KeyName, $LogFile, $(if ($autoCheck.Checked) { '-AutoAccept' } else { '' }))
+    $trigger = New-ScheduledTaskTrigger -AtStartup
+    $trigger.Delay = 'PT20S'
+    $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
+    Register-ScheduledTask -TaskName 'VigilTeacherPair' -Action $action -Trigger $trigger `
+        -Principal $principal -Settings $settings -Force | Out-Null
+}
+
+function Remove-TeacherAutoStart {
+    try { Unregister-ScheduledTask -TaskName 'VigilTeacherPair' -Confirm:$false -ErrorAction Stop } catch {}
+}
 
 $script:LastLogSize = 0
 function Update-Log {
@@ -230,8 +285,18 @@ $btnStart = Add-Button -Text '生成新口令并开始配对' -X 28 -Y 196 -W 22
         if ($created) { $logBox.AppendText("已创建课堂认证密钥 $KeyName`r`n") }
         $code = New-AccessCode
         $codeBox.Text = $code
-        Start-PairServer -AccessCode $code
+        if ($autoStartCheck.Checked) {
+            Install-TeacherAutoStart -Code $code
+            $logBox.AppendText("已注册开机自启：VigilTeacherPair（口令 $code）`r`n")
+        } else {
+            Remove-TeacherAutoStart
+        }
+        Save-PairSettings
+        Start-PairServer -AccessCode $code -AutoAccept:$autoCheck.Checked
         Update-Log
+        if ($autoCheck.Checked) {
+            $logBox.AppendText("免口令模式已开启：同网段学生端会自动加入。`r`n")
+        }
         $logBox.AppendText("口令 $code 已生效，等待学生端接入…`r`n")
         $btnStop.Enabled = $true
         $btnCopy.Enabled = $true

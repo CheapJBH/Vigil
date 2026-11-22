@@ -30,6 +30,8 @@
 #include <QMenu>
 #include <QMessageBox>
 #include <QSplitter>
+#include <QStyle>
+#include <QToolButton>
 
 #include "AboutDialog.h"
 #include "AccessControlProvider.h"
@@ -525,6 +527,20 @@ void MainWindow::addFeaturesToToolBar()
 
 		haveAnyFeature = true;
 		lastWasMode = isMode;
+	}
+
+	// 帮助入口：工具栏末尾 → 关于 / 使用说明
+	ui->toolBar->addSeparator();
+	{
+		auto helpButton = new QToolButton( ui->toolBar );
+		helpButton->setIcon( style()->standardIcon( QStyle::SP_MessageBoxQuestion ) );
+		helpButton->setText( tr( "帮助" ) );
+		helpButton->setToolTip( tr( "关于 Vigil、版本与使用说明" ) );
+		helpButton->setToolButtonStyle( Qt::ToolButtonTextBesideIcon );
+		helpButton->setAutoRaise( true );
+		helpButton->setObjectName( QStringLiteral( "helpButton" ) );
+		connect( helpButton, &QToolButton::clicked, this, &MainWindow::showAboutDialog );
+		ui->toolBar->addWidget( helpButton );
 	}
 }
 
