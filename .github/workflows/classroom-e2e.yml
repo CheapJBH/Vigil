@@ -119,26 +119,13 @@ jobs:
           $ps1 = Join-Path $PWD 'tools\classroom-setup\student\VigilStudentSetup.ps1'
           $p = Start-Process powershell -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',$ps1) -PassThru
           Start-Sleep -Seconds 6
-          Add-Type @'
-          using System;
-          using System.Runtime.InteropServices;
-          public class W {
-            [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
-            [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
-            public struct RECT { public int Left, Top, Right, Bottom; }
-          }
-'@
           $p.Refresh()
-          $h = $p.MainWindowHandle
-          if ($h -eq [IntPtr]::Zero) { throw "student window handle not found" }
-          [void][W]::SetForegroundWindow($h)
-          Start-Sleep -Milliseconds 800
-          $r = New-Object W+RECT
-          [void][W]::GetWindowRect($h, [ref]$r)
-          $w = $r.Right - $r.Left; $hh = $r.Bottom - $r.Top
-          $bmp = New-Object System.Drawing.Bitmap $w, $hh
+          Write-Host "window title: $($p.MainWindowTitle)"
+          # 整屏截图（避免 P/Invoke，runner 分辨率固定 1024x768）
+          $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $bmp = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
           $g = [System.Drawing.Graphics]::FromImage($bmp)
-          $g.CopyFromScreen($r.Left, $r.Top, 0, 0, $bmp.Size)
+          $g.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
           $g.Dispose()
           New-Item -ItemType Directory -Force out | Out-Null
           $bmp.Save((Join-Path $PWD 'out\student-join.png'), [System.Drawing.Imaging.ImageFormat]::Png)
