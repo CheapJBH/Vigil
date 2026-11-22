@@ -149,6 +149,27 @@ jobs:
           if ($fail -gt 0) { throw "$fail assertion(s) failed" }
           Write-Host "ALL ASSERTIONS PASSED"
 
+      - name: Diagnose service start failure
+        if: always()
+        shell: pwsh
+        run: |
+          Write-Host "--- sc qc VigilService ---"
+          sc.exe qc VigilService 2>&1 | Out-String | Write-Host
+          Write-Host "--- service state ---"
+          Get-Service VigilService -ErrorAction SilentlyContinue | Format-List Name, Status, StartType | Out-String | Write-Host
+          Write-Host "--- try start ---"
+          try { Start-Service VigilService -ErrorAction Stop; Write-Host "start: OK" }
+          catch { Write-Host "start FAILED: $($_.Exception.Message)" }
+          Start-Sleep -Seconds 5
+          Get-Service VigilService -ErrorAction SilentlyContinue | Format-List Status | Out-String | Write-Host
+          Write-Host "--- last service errors ---"
+          sc.exe queryex VigilService 2>&1 | Out-String | Write-Host
+          Write-Host "--- application event log (Vigil) ---"
+          Get-WinEvent -LogName Application -MaxEvents 60 -ErrorAction SilentlyContinue |
+            Where-Object { $_.Message -match 'vigil|Vigil' } |
+            Select-Object -First 8 TimeCreated, LevelDisplayName, ProviderName, Message |
+            Format-List | Out-String | Write-Host
+
       - name: Install autostart task and verify
         shell: pwsh
         run: |

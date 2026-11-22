@@ -202,8 +202,14 @@ function Restart-VigilService {
         } else {
             Start-Service -Name $ServiceName -ErrorAction Stop
         }
-        Start-Sleep -Milliseconds 500
-        return (Get-Service -Name $ServiceName).Status -eq 'Running'
+        # 服务启动是异步的，轮询最多 15 秒
+        for ($i = 0; $i -lt 30; $i++) {
+            Start-Sleep -Milliseconds 500
+            if ((Get-Service -Name $ServiceName -ErrorAction SilentlyContinue).Status -eq 'Running') {
+                return $true
+            }
+        }
+        return $false
     } catch {
         return $false
     }
