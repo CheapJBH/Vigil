@@ -167,8 +167,8 @@ function Import-PublicKey {
     try {
         Set-Content -Path $tmp -Value $Pem -Encoding ASCII -NoNewline
         $out = & $Cli authkeys import "$KeyName/public" $tmp 2>&1 | Out-String
-        if ($LASTEXITCODE -ne 0 -and $out -notmatch 'already exists') {
-            # 已存在时先删再导入，保证口令轮换后仍能更新
+        if ($LASTEXITCODE -ne 0) {
+            # 已存在时（提示语言可能是中文，不能靠文案判断）先删再导入，保证口令轮换后仍能更新
             $null = & $Cli authkeys delete "$KeyName/public" 2>&1
             $out = & $Cli authkeys import "$KeyName/public" $tmp 2>&1 | Out-String
             if ($LASTEXITCODE -ne 0) { throw $out.Trim() }
@@ -243,15 +243,21 @@ function Invoke-SilentPairOnce {
 
 function Invoke-SilentPair {
     param([string]$PreferredIp, [int]$Tries = 6)
+    $lastError = $null
     for ($i = 1; $i -le $Tries; $i++) {
         try {
             if (Invoke-SilentPairOnce -PreferredIp $PreferredIp) { return 0 }
         } catch {
-            Write-SilentLog ('第 {0} 次失败：{1}' -f $i, $_.Exception.Message)
+            $lastError = $_.Exception.Message
+            Write-SilentLog ('第 {0} 次失败：{1}' -f $i, $lastError)
         }
         if ($i -lt $Tries) { Start-Sleep -Seconds 10 }
     }
-    Write-SilentLog ('{0} 次尝试均未找到教师端，退出' -f $Tries)
+    if ($lastError) {
+        Write-SilentLog ('{0} 次尝试失败，最后错误：{1}' -f $Tries, $lastError)
+    } else {
+        Write-SilentLog ('{0} 次尝试均未找到教师端，退出' -f $Tries)
+    }
     return 1
 }
 
