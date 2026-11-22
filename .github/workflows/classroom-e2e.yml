@@ -169,6 +169,21 @@ jobs:
             Where-Object { $_.Message -match 'vigil|Vigil' } |
             Select-Object -First 8 TimeCreated, LevelDisplayName, ProviderName, Message |
             Format-List | Out-String | Write-Host
+          Write-Host "--- Service Control Manager events ---"
+          Get-WinEvent -FilterHashtable @{LogName='System'; ProviderName='Service Control Manager'} -MaxEvents 25 -ErrorAction SilentlyContinue |
+            Select-Object -First 10 TimeCreated, Id, LevelDisplayName, Message |
+            Format-List | Out-String | Write-Host
+          Write-Host "--- run service exe in foreground ---"
+          Push-Location 'C:\Program Files\Vigil'
+          try {
+            $sp = Start-Process .\vigil-service.exe -PassThru -RedirectStandardError "$PWD\svc.err.txt" -RedirectStandardOutput "$PWD\svc.out.txt" -WindowStyle Hidden
+            Start-Sleep -Seconds 4
+            Write-Host "exited=$($sp.HasExited) code=$($sp.ExitCode)"
+            if (-not $sp.HasExited) { Stop-Process -Id $sp.Id -Force -ErrorAction SilentlyContinue }
+            foreach ($f in @('svc.err.txt','svc.out.txt')) {
+              if (Test-Path $f) { "--- $f ---"; Get-Content $f | Select-Object -First 30 }
+            }
+          } finally { Pop-Location }
 
       - name: Install autostart task and verify
         shell: pwsh
