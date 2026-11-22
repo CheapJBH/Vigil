@@ -160,18 +160,33 @@ function Test-TeacherAlive {
     }
 }
 
+function Invoke-Cli {
+    param([string[]]$CliArgs)
+    # Windows PowerShell 5.1 + $ErrorActionPreference='Stop' 时，
+    # 原生命令写 stderr 会被当成终止错误抛出，$LASTEXITCODE 读不到。
+    $old = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $text = (& $Cli @CliArgs 2>&1 | ForEach-Object { $_.ToString() }) -join "`n"
+        return [pscustomobject]@{ Code = $LASTEXITCODE; Text = $text }
+    } finally {
+        $ErrorActionPreference = $old
+    }
+}
+
 function Import-PublicKey {
     param([string]$Pem)
 
     $tmp = Join-Path $env:TEMP ("vigil-pub-in-{0}.pem" -f $PID)
     try {
         Set-Content -Path $tmp -Value $Pem -Encoding ASCII -NoNewline
-        $out = & $Cli authkeys import "$KeyName/public" $tmp 2>&1 | Out-String
-        if ($LASTEXITCODE -ne 0) {
-            # 已存在时（提示语言可能是中文，不能靠文案判断）先删再导入，保证口令轮换后仍能更新
-            $null = & $Cli authkeys delete "$KeyName/public" 2>&1
-            $out = & $Cli authkeys import "$KeyName/public" $tmp 2>&1 | Out-String
-            if ($LASTEXITCODE -ne 0) { throw $out.Trim() }
+        # 先删旧公钥（不存在也无妨），再导入；不依赖 CLI 的本地化错误文案/退出码
+        $null = Invoke-Cli @('authkeys', 'delete', "$KeyName/public")
+        $r = Invoke-Cli @('authkeys', 'import', "$KeyName/public", $tmp)
+        if ($r.Code -ne 0) { throw $r.Text.Trim() }
+        $check = Invoke-Cli @('authkeys', 'list')
+        if ($check.Text -notmatch [regex]::Escape("$KeyName/public")) {
+            throw "导入后未在 authkeys list 中找到 $KeyName/public"
         }
         return $true
     } finally {
@@ -228,8 +243,8 @@ function Invoke-SilentPairOnce {
         $pem = Invoke-PairRequest -Ip $ip -Auto
         if (-not $pem) { continue }
         $null = Import-PublicKey -Pem $pem
-        $null = & $Cli config set 'Authentication/Method' 'KeyFile' 2>&1
-        if ($LASTEXITCODE -ne 0) { Write-SilentLog '警告：认证方式设置失败' }
+        $cr = Invoke-Cli @('config', 'set', 'Authentication/Method', 'KeyFile')
+        if ($cr.Code -ne 0) { Write-SilentLog '警告：认证方式设置失败' }
         $ok = Restart-VigilService
         Write-SilentLog ('配对成功：教师机 {0}，服务重启 {1}' -f $ip, $(if ($ok) { '成功' } else { '失败' }))
         try {
@@ -455,8 +470,8 @@ $btnPair = Add-Button -Text '加入课堂' -X 28 -Y 160 -W 200 -OnClick {
         Log '已写入课堂公钥 classroom/public'
 
         # 学生端必须切到密钥认证，否则教师端公钥不会生效
-        $null = & $Cli config set 'Authentication/Method' 'KeyFile' 2>&1
-        if ($LASTEXITCODE -ne 0) { Log '警告：认证方式设置失败，请手动检查配置' }
+        $r = Invoke-Cli @('config', 'set', 'Authentication/Method', 'KeyFile')
+        if ($r.Code -ne 0) { Log '警告：认证方式设置失败，请手动检查配置' }
         else { Log '认证方式已设为 KeyFile' }
 
         Set-Status '正在重启 Vigil 服务…'
